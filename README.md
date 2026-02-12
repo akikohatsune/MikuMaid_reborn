@@ -6,6 +6,8 @@ This project focuses on:
 - providing a consistent, well-defined API surface
 - making future features easier to ship without breaking existing behavior
 
+## Miku used
+
 Supported providers:
 - Gemini
 - Groq

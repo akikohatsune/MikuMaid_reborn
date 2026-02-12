@@ -1,8 +1,12 @@
 from __future__ import annotations
 
-from typing import Any, Awaitable, Callable, TypedDict
+import base64
+import binascii
+from typing import Any, Awaitable, Callable, TypedDict, cast
 
-import aiohttp
+from google import genai
+from google.genai import types as genai_types
+from groq import AsyncGroq
 
 from config import Settings
 
@@ -19,11 +23,27 @@ class ChatMessage(TypedDict, total=False):
 
 
 class LLMClient:
-    REQUEST_TIMEOUT_SECONDS = 60
-
-    def __init__(self, settings: Settings, session: aiohttp.ClientSession):
+    def __init__(self, settings: Settings):
         self.settings = settings
-        self.session = session
+        self.gemini_client = (
+            genai.Client(api_key=settings.gemini_api_key)
+            if settings.gemini_api_key
+            else None
+        )
+        approval_key = settings.approval_gemini_api_key
+        if approval_key and approval_key == settings.gemini_api_key and self.gemini_client:
+            self.approval_gemini_client = self.gemini_client
+        else:
+            self.approval_gemini_client = (
+                genai.Client(api_key=approval_key) if approval_key else None
+            )
+        self.groq_client = (
+            AsyncGroq(api_key=settings.groq_api_key) if settings.groq_api_key else None
+        )
+
+    async def aclose(self) -> None:
+        if self.groq_client and hasattr(self.groq_client, "close"):
+            await self.groq_client.close()
 
     async def generate(self, messages: list[ChatMessage]) -> str:
         handlers: dict[str, Callable[[list[ChatMessage]], Awaitable[str]]] = {
@@ -41,119 +61,67 @@ class LLMClient:
         return verdict == "có"
 
     async def _approve_call_name_gemini(self, field_name: str, value: str) -> str:
-        if not self.settings.approval_gemini_api_key:
+        if self.approval_gemini_client is None:
             raise RuntimeError(
                 "Missing APPROVAL_GEMINI_API_KEY (or GEMINI_API_KEY fallback)"
             )
 
-        endpoint = (
-            "https://generativelanguage.googleapis.com/v1beta/models/"
-            f"{self.settings.gemini_approval_model}:generateContent"
-            f"?key={self.settings.approval_gemini_api_key}"
-        )
-        payload: dict[str, Any] = {
-            "contents": [
-                {
-                    "role": "user",
-                    "parts": [
-                        {
-                            "text": (
-                                f"Loai xung ho: {field_name}\n"
-                                f"Noi dung: {value}"
-                            )
-                        }
+        response = await self.approval_gemini_client.aio.models.generate_content(
+            model=self.settings.gemini_approval_model,
+            contents=[
+                genai_types.Content(
+                    role="user",
+                    parts=[
+                        genai_types.Part.from_text(
+                            text=f"Loai xung ho: {field_name}\nNoi dung: {value}"
+                        )
                     ],
-                }
+                )
             ],
-            "generationConfig": {
-                "temperature": 0,
-            },
-            "system_instruction": {
-                "parts": [
-                    {
-                        "text": self._approval_system_instruction()
-                    }
-                ]
-            },
-        }
-
-        status_code, data = await self._post_json(endpoint, payload=payload)
-        self._raise_if_error("GeminiApproval", status_code, data)
-
-        try:
-            raw = data["candidates"][0]["content"]["parts"][0]["text"]
-        except (KeyError, IndexError, TypeError) as exc:
-            raise RuntimeError(f"Invalid Gemini approval response: {data}") from exc
-        return raw
+            config=genai_types.GenerateContentConfig(
+                temperature=0,
+                system_instruction=self._approval_system_instruction(),
+            ),
+        )
+        return self._extract_gemini_text(response, context="Gemini approval")
 
     async def _call_gemini(self, messages: list[ChatMessage]) -> str:
-        if not self.settings.gemini_api_key:
+        if self.gemini_client is None:
             raise RuntimeError("Missing GEMINI_API_KEY")
-
-        endpoint = (
-            "https://generativelanguage.googleapis.com/v1beta/models/"
-            f"{self.settings.gemini_model}:generateContent"
-            f"?key={self.settings.gemini_api_key}"
+        response = await self.gemini_client.aio.models.generate_content(
+            model=self.settings.gemini_model,
+            contents=self._build_gemini_contents(messages),
+            config=genai_types.GenerateContentConfig(
+                temperature=self.settings.temperature,
+                system_instruction=self.settings.system_prompt,
+            ),
         )
-
-        contents = self._build_gemini_contents(messages)
-
-        payload: dict[str, Any] = {
-            "contents": contents,
-            "generationConfig": {
-                "temperature": self.settings.temperature,
-            },
-            "system_instruction": {
-                "parts": [{"text": self.settings.system_prompt}],
-            },
-        }
-
-        status_code, data = await self._post_json(endpoint, payload=payload)
-        self._raise_if_error("Gemini", status_code, data)
-
-        try:
-            return data["candidates"][0]["content"]["parts"][0]["text"].strip()
-        except (KeyError, IndexError, TypeError) as exc:
-            raise RuntimeError(f"Invalid Gemini response: {data}") from exc
+        return self._extract_gemini_text(response, context="Gemini")
 
     async def _call_groq(self, messages: list[ChatMessage]) -> str:
-        if not self.settings.groq_api_key:
+        if self.groq_client is None:
             raise RuntimeError("Missing GROQ_API_KEY")
-
-        endpoint = "https://api.groq.com/openai/v1/chat/completions"
-        headers = {
-            "Authorization": f"Bearer {self.settings.groq_api_key}",
-            "Content-Type": "application/json",
-        }
-
-        payload = {
-            "model": self.settings.groq_model,
-            "messages": self._build_groq_messages(messages),
-            "temperature": self.settings.temperature,
-        }
-
-        status_code, data = await self._post_json(
-            endpoint,
-            payload=payload,
-            headers=headers,
+        chat_completion = await self.groq_client.chat.completions.create(
+            model=self.settings.groq_model,
+            messages=self._build_groq_messages(messages),
+            temperature=self.settings.temperature,
         )
-        self._raise_if_error("Groq", status_code, data)
-
-        try:
-            return data["choices"][0]["message"]["content"].strip()
-        except (KeyError, IndexError, TypeError) as exc:
-            raise RuntimeError(f"Invalid Groq response: {data}") from exc
+        message = chat_completion.choices[0].message
+        content = message.content
+        if isinstance(content, str) and content.strip():
+            return content.strip()
+        raise RuntimeError("Groq returned an empty response.")
 
     def _build_gemini_contents(
         self,
         messages: list[ChatMessage],
-    ) -> list[dict[str, Any]]:
-        contents: list[dict[str, Any]] = []
+    ) -> list[genai_types.Content]:
+        contents: list[genai_types.Content] = []
         for msg in messages:
             role = "model" if msg["role"] == "assistant" else "user"
-            parts = self._build_message_parts(msg)
+            parts = self._build_gemini_parts(msg)
             if parts:
-                contents.append({"role": role, "parts": parts})
+                contents.append(genai_types.Content(role=role, parts=parts))
         return contents
 
     def _build_groq_messages(
@@ -178,50 +146,54 @@ class LLMClient:
                 groq_messages.append({"role": msg["role"], "content": text})
         return groq_messages
 
-    def _build_message_parts(self, msg: ChatMessage) -> list[dict[str, Any]]:
-        parts: list[dict[str, Any]] = []
+    def _build_gemini_parts(self, msg: ChatMessage) -> list[genai_types.Part]:
+        parts: list[genai_types.Part] = []
         text = msg.get("content", "").strip()
         if text:
-            parts.append({"text": text})
+            parts.append(genai_types.Part.from_text(text=text))
 
         for image in msg.get("images", []):
-            parts.append(
-                {
-                    "inline_data": {
-                        "mime_type": image["mime_type"],
-                        "data": image["data_b64"],
-                    }
-                }
-            )
+            parts.append(self._image_part_from_b64(image))
         return parts
 
-    async def _post_json(
+    def _image_part_from_b64(
         self,
-        endpoint: str,
-        payload: dict[str, Any],
-        headers: dict[str, str] | None = None,
-    ) -> tuple[int, dict[str, Any]]:
-        async with self.session.post(
-            endpoint,
-            headers=headers,
-            json=payload,
-            timeout=self.REQUEST_TIMEOUT_SECONDS,
-        ) as resp:
-            data = await resp.json(content_type=None)
-            if not isinstance(data, dict):
-                raise RuntimeError(f"Unexpected API response type: {type(data).__name__}")
-            return resp.status, data
+        image: ImageInput,
+    ) -> genai_types.Part:
+        try:
+            raw_bytes = base64.b64decode(image["data_b64"], validate=True)
+        except (binascii.Error, ValueError) as exc:
+            raise RuntimeError("Invalid image base64 input.") from exc
+        return genai_types.Part.from_bytes(
+            data=raw_bytes,
+            mime_type=image["mime_type"],
+        )
 
-    def _raise_if_error(
+    def _extract_gemini_text(
         self,
-        provider_name: str,
-        status_code: int,
-        data: dict[str, Any],
-    ) -> None:
-        if status_code < 400:
-            return
-        detail = data.get("error", {}).get("message", str(data))
-        raise RuntimeError(f"{provider_name} API error ({status_code}): {detail}")
+        response: Any,
+        *,
+        context: str,
+    ) -> str:
+        direct_text = cast(str | None, getattr(response, "text", None))
+        if direct_text and direct_text.strip():
+            return direct_text.strip()
+
+        candidates = cast(list[Any], getattr(response, "candidates", []) or [])
+        for candidate in candidates:
+            content = getattr(candidate, "content", None)
+            if content is None:
+                continue
+            parts = cast(list[Any], getattr(content, "parts", []) or [])
+            text_parts = [
+                str(part.text).strip()
+                for part in parts
+                if getattr(part, "text", None)
+                and str(part.text).strip()
+            ]
+            if text_parts:
+                return "\n".join(text_parts)
+        raise RuntimeError(f"{context} returned an empty response.")
 
     def _normalize_yes_no(self, value: str) -> str | None:
         cleaned = value.strip().lower().strip("`'\".!?[](){} ")

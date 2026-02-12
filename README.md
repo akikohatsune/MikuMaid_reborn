@@ -17,6 +17,10 @@ This project focuses on:
 - Gemini
 - Groq
 
+**SDKs:**
+- `google-genai` for Gemini
+- `groq` for Groq
+
 **Default personality:**
 - Miku is playful, friendly, and helpful.
 - Default response language is English (unless the user asks for another language).
@@ -28,6 +32,9 @@ python -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 ```
+
+Termux note:
+- Official SDK dependencies may require Rust/C toolchain on some Termux Python builds (for `pydantic-core` / `cryptography`).
 
 ## 2) Configuration
 

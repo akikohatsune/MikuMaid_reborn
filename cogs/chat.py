@@ -5,7 +5,6 @@ import mimetypes
 import re
 from typing import cast
 
-import aiohttp
 import discord
 from discord.ext import commands, tasks
 
@@ -26,8 +25,7 @@ class AIChatCog(commands.Cog):
     def __init__(self, bot: commands.Bot, settings: Settings):
         self.bot = bot
         self.settings = settings
-        self.session = aiohttp.ClientSession()
-        self.client = LLMClient(settings=settings, session=self.session)
+        self.client = LLMClient(settings=settings)
         self.chat_memory = ShortTermMemoryStore(
             db_path=settings.chat_memory_db_path,
             max_history_turns=settings.max_history,
@@ -62,7 +60,7 @@ class AIChatCog(commands.Cog):
         await self.chat_memory.close()
         await self.ban_store.close()
         await self.callnames_store.close()
-        await self.session.close()
+        await self.client.aclose()
 
     @tasks.loop(seconds=CLEANUP_INTERVAL_SECONDS)
     async def cleanup_inactive_memory(self) -> None:

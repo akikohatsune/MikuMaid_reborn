@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from typing import Awaitable, Callable, cast
 
-import aiohttp
 from discord.ext import commands
 
 from client import LLMClient
@@ -16,8 +15,7 @@ class CallNamesCog(commands.Cog):
     def __init__(self, bot: commands.Bot, settings: Settings):
         self.bot = bot
         self.settings = settings
-        self.session = aiohttp.ClientSession()
-        self.client = LLMClient(settings=settings, session=self.session)
+        self.client = LLMClient(settings=settings)
         self.store = ShortTermMemoryStore(
             db_path=settings.callnames_db_path,
             max_history_turns=settings.max_history,
@@ -28,7 +26,7 @@ class CallNamesCog(commands.Cog):
 
     async def cog_unload(self) -> None:
         await self.store.close()
-        await self.session.close()
+        await self.client.aclose()
 
     def _scope_guild_id(self, ctx: commands.Context[commands.Bot]) -> int:
         return ctx.guild.id if ctx.guild else 0

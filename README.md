@@ -8,11 +8,11 @@ This project focuses on:
 
 ## Miku used
 
-Supported providers:
+**Supported providers:**
 - Gemini
 - Groq
 
-Default personality:
+**Default personality:**
 - Miku is playful, friendly, and helpful.
 - Default response language is English (unless the user asks for another language).
 

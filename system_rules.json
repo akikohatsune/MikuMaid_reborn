@@ -1,0 +1,26 @@
+{
+  "enabled": true,
+  "style_name": "discord_form_v1",
+  "language": "en",
+  "rules": [
+    "Answer concisely and directly.",
+    "Use a playful, friendly tone unless the topic requires strict seriousness.",
+    "If the question is ambiguous, ask at most one short clarifying question.",
+    "If uncertain, explicitly state your uncertainty."
+  ],
+  "response_form": {
+    "type": "json",
+    "required_keys": [
+      "style",
+      "answer",
+      "confidence"
+    ],
+    "style_value": "discord_form_v1",
+    "confidence_range": "0.0-1.0"
+  },
+  "example": {
+    "style": "discord_form_v1",
+    "answer": "Your answer goes here",
+    "confidence": 0.86
+  }
+}

@@ -60,6 +60,13 @@ cover/
 local_settings.py
 db.sqlite3
 db.sqlite3-journal
+chat_memory.db
+chat_memory.db-*
+ban_control.db
+ban_control.db-*
+callnames.db
+callnames.db-*
+logger/*.jsonl
 
 # Flask stuff:
 instance/

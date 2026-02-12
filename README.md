@@ -123,3 +123,6 @@ Recommended bot permissions:
 - Read Messages / View Channels
 - Send Messages
 - Read Message History
+
+## License
+MIT License — see `LICENSE` for details.

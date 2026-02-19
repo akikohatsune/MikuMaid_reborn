@@ -16,10 +16,12 @@ This project focuses on:
 **Supported providers:**
 - Gemini
 - Groq
+- OpenAI (ChatGPT models)
 
 **SDKs:**
 - `google-genai` for Gemini
 - `groq` for Groq
+- `openai` for OpenAI
 
 **Default personality:**
 - Miku is playful, friendly, and helpful.
@@ -49,13 +51,15 @@ Edit `.env`:
 - `RPC_ACTIVITY_TYPE`: `none`, `playing`, `listening`, `watching`, `competing`, or `streaming`
 - `RPC_ACTIVITY_NAME`: activity text shown in Discord presence
 - `RPC_ACTIVITY_URL`: required only when `RPC_ACTIVITY_TYPE=streaming`
-- `LLM_PROVIDER`: `gemini` or `groq`
+- `LLM_PROVIDER`: `gemini`, `groq`, `openai`, or `chatgpt` (alias of `openai`)
 - `GEMINI_API_KEY`: required when `LLM_PROVIDER=gemini`
 - `APPROVAL_GEMINI_API_KEY`: optional dedicated key for call-name approval (fallback: `GEMINI_API_KEY`)
 - `GEMINI_MODEL`: Gemini model for chat (customizable, default `gemini-3-flash`)
 - `GEMINI_APPROVAL_MODEL`: Gemini model for call-name approval (customizable, default `gemini-3-flash`)
 - `GROQ_API_KEY`: required when `LLM_PROVIDER=groq`
 - `GROQ_MODEL`: Groq model name
+- `OPENAI_API_KEY`: required when `LLM_PROVIDER=openai` or `LLM_PROVIDER=chatgpt`
+- `OPENAI_MODEL`: OpenAI/ChatGPT model name (default `gpt-4o-mini`)
 - `SYSTEM_PROMPT`: default Miku personality/instructions
 - `SYSTEM_RULES_JSON`: JSON file for extra system rules
 - `CHAT_REPLAY_LOG_PATH`: replay log file path (default `logger/chat_replay.jsonl`)

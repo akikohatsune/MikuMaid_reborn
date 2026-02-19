@@ -80,6 +80,7 @@ class MikuAIBot(commands.Bot):
         user_id = user.id if user else "unknown"
         print(f"Logged in as {user} (ID: {user_id})")
         print(f"Provider: {self.settings.provider}")
+        print(f"Model: {self._active_chat_model()}")
         print("Approval provider: gemini (fixed)")
         print(f"Approval model: {self.settings.gemini_approval_model}")
         print(f"System rules JSON: {self.settings.system_rules_json}")
@@ -90,6 +91,15 @@ class MikuAIBot(commands.Bot):
         print(f"Memory idle TTL: {self.settings.memory_idle_ttl_seconds}s")
         print(f"Image max bytes: {self.settings.image_max_bytes}")
         print(f"Max reply chars: {self.settings.max_reply_chars}")
+
+    def _active_chat_model(self) -> str:
+        if self.settings.provider == "gemini":
+            return self.settings.gemini_model
+        if self.settings.provider == "groq":
+            return self.settings.groq_model
+        if self.settings.provider == "openai":
+            return self.settings.openai_model
+        return "unknown"
 
 
 async def main() -> None:

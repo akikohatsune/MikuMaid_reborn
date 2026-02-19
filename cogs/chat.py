@@ -439,9 +439,10 @@ class AIChatCog(commands.Cog):
 
     @commands.command(name="provider")
     async def provider(self, ctx: commands.Context[commands.Bot]) -> None:
+        model = self._active_chat_model()
         await ctx.reply(
             f"Current provider: `{self.settings.provider}` | "
-            f"Model: `{self.settings.gemini_model if self.settings.provider == 'gemini' else self.settings.groq_model}` | "
+            f"Model: `{model}` | "
             f"Approval provider: `gemini` | "
             f"Approval model: `{self.settings.gemini_approval_model}` | "
             f"Chat DB: `{self.settings.chat_memory_db_path}` | "
@@ -452,6 +453,15 @@ class AIChatCog(commands.Cog):
             f"Reply chunk size: `{self.settings.max_reply_chars}` chars | "
             f"Terminated: `{self.is_terminated}`"
         )
+
+    def _active_chat_model(self) -> str:
+        if self.settings.provider == "gemini":
+            return self.settings.gemini_model
+        if self.settings.provider == "groq":
+            return self.settings.groq_model
+        if self.settings.provider == "openai":
+            return self.settings.openai_model
+        return "unknown"
 
     @commands.command(name="replaymiku")
     async def replay_miku(

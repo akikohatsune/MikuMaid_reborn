@@ -11,6 +11,7 @@ from dotenv import load_dotenv
 load_dotenv()
 DEFAULT_GEMINI_MODEL = "gemini-3-flash"
 DEFAULT_GEMINI_APPROVAL_MODEL = "gemini-3-flash"
+DEFAULT_OPENAI_MODEL = "gpt-4o-mini"
 
 
 @dataclass(slots=True)
@@ -29,6 +30,8 @@ class Settings:
     gemini_approval_model: str
     groq_api_key: str | None
     groq_model: str
+    openai_api_key: str | None
+    openai_model: str
     system_prompt: str
     system_rules_json: str
     chat_replay_log_path: str
@@ -109,8 +112,10 @@ def _load_system_rules_prompt(path_value: str) -> str:
 
 def get_settings() -> Settings:
     provider = _get_env_str("LLM_PROVIDER", "gemini").lower()
-    if provider not in {"gemini", "groq"}:
-        raise ValueError("LLM_PROVIDER must be either 'gemini' or 'groq'.")
+    if provider == "chatgpt":
+        provider = "openai"
+    if provider not in {"gemini", "groq", "openai"}:
+        raise ValueError("LLM_PROVIDER must be one of: gemini, groq, openai, chatgpt.")
 
     discord_token = _get_env_str("DISCORD_TOKEN", "")
     if not discord_token:
@@ -132,8 +137,10 @@ def get_settings() -> Settings:
         DEFAULT_GEMINI_APPROVAL_MODEL,
     )
     groq_model = _get_env_str("GROQ_MODEL", "llama-3.3-70b-versatile")
+    openai_model = _get_env_str("OPENAI_MODEL", DEFAULT_OPENAI_MODEL)
     gemini_api_key = _get_env_str("GEMINI_API_KEY", "") or None
     groq_api_key = _get_env_str("GROQ_API_KEY", "") or None
+    openai_api_key = _get_env_str("OPENAI_API_KEY", "") or None
     approval_gemini_api_key = (
         _get_env_str("APPROVAL_GEMINI_API_KEY", "") or gemini_api_key
     )
@@ -144,6 +151,10 @@ def get_settings() -> Settings:
         raise ValueError("Missing GEMINI_API_KEY for LLM_PROVIDER=gemini.")
     if provider == "groq" and not groq_api_key:
         raise ValueError("Missing GROQ_API_KEY for LLM_PROVIDER=groq.")
+    if provider == "openai" and not openai_api_key:
+        raise ValueError(
+            "Missing OPENAI_API_KEY for LLM_PROVIDER=openai (or chatgpt)."
+        )
     if not approval_gemini_api_key:
         raise ValueError(
             "Missing approval Gemini API key. Set APPROVAL_GEMINI_API_KEY "
@@ -192,6 +203,8 @@ def get_settings() -> Settings:
         gemini_approval_model=gemini_approval_model,
         groq_api_key=groq_api_key,
         groq_model=groq_model,
+        openai_api_key=openai_api_key,
+        openai_model=openai_model,
         system_prompt=full_system_prompt,
         system_rules_json=system_rules_json,
         chat_replay_log_path=_get_env_str(

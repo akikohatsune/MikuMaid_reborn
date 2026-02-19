@@ -2,11 +2,16 @@ from __future__ import annotations
 
 import base64
 import binascii
+import inspect
 from typing import Any, Awaitable, Callable, TypedDict, cast
 
 from google import genai
 from google.genai import types as genai_types
 from groq import AsyncGroq
+try:
+    from openai import AsyncOpenAI
+except ImportError:  # pragma: no cover - optional dependency at runtime
+    AsyncOpenAI = None  # type: ignore[assignment]
 
 from config import Settings
 
@@ -40,15 +45,25 @@ class LLMClient:
         self.groq_client = (
             AsyncGroq(api_key=settings.groq_api_key) if settings.groq_api_key else None
         )
+        self.openai_client = (
+            AsyncOpenAI(api_key=settings.openai_api_key)
+            if settings.openai_api_key and AsyncOpenAI is not None
+            else None
+        )
 
     async def aclose(self) -> None:
         if self.groq_client and hasattr(self.groq_client, "close"):
             await self.groq_client.close()
+        if self.openai_client and hasattr(self.openai_client, "close"):
+            maybe_awaitable = self.openai_client.close()
+            if inspect.isawaitable(maybe_awaitable):
+                await maybe_awaitable
 
     async def generate(self, messages: list[ChatMessage]) -> str:
         handlers: dict[str, Callable[[list[ChatMessage]], Awaitable[str]]] = {
             "gemini": self._call_gemini,
             "groq": self._call_groq,
+            "openai": self._call_openai,
         }
         handler = handlers.get(self.settings.provider)
         if handler is None:
@@ -112,6 +127,22 @@ class LLMClient:
             return content.strip()
         raise RuntimeError("Groq returned an empty response.")
 
+    async def _call_openai(self, messages: list[ChatMessage]) -> str:
+        if AsyncOpenAI is None:
+            raise RuntimeError("OpenAI SDK not installed. Run: pip install -r requirements.txt")
+        if self.openai_client is None:
+            raise RuntimeError("Missing OPENAI_API_KEY")
+        chat_completion = await self.openai_client.chat.completions.create(
+            model=self.settings.openai_model,
+            messages=self._build_openai_messages(messages),
+            temperature=self.settings.temperature,
+        )
+        message = chat_completion.choices[0].message
+        content = message.content
+        if isinstance(content, str) and content.strip():
+            return content.strip()
+        raise RuntimeError("OpenAI returned an empty response.")
+
     def _build_gemini_contents(
         self,
         messages: list[ChatMessage],
@@ -145,6 +176,28 @@ class LLMClient:
             elif text:
                 groq_messages.append({"role": msg["role"], "content": text})
         return groq_messages
+
+    def _build_openai_messages(
+        self,
+        messages: list[ChatMessage],
+    ) -> list[dict[str, Any]]:
+        openai_messages: list[dict[str, Any]] = [
+            {"role": "system", "content": self.settings.system_prompt}
+        ]
+        for msg in messages:
+            text = msg.get("content", "").strip()
+            images = msg.get("images", [])
+            if images:
+                parts: list[dict[str, Any]] = []
+                if text:
+                    parts.append({"type": "text", "text": text})
+                for image in images:
+                    data_url = f"data:{image['mime_type']};base64,{image['data_b64']}"
+                    parts.append({"type": "image_url", "image_url": {"url": data_url}})
+                openai_messages.append({"role": msg["role"], "content": parts})
+            elif text:
+                openai_messages.append({"role": msg["role"], "content": text})
+        return openai_messages
 
     def _build_gemini_parts(self, msg: ChatMessage) -> list[genai_types.Part]:
         parts: list[genai_types.Part] = []

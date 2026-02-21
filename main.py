@@ -91,6 +91,14 @@ class MikuAIBot(commands.Bot):
         print(f"Memory idle TTL: {self.settings.memory_idle_ttl_seconds}s")
         print(f"Image max bytes: {self.settings.image_max_bytes}")
         print(f"Max reply chars: {self.settings.max_reply_chars}")
+        print(
+            "Dual mention hook: "
+            f"enabled={self.settings.dual_mention_hook_enabled}, "
+            f"teto={self.settings.teto_bot_id}, "
+            f"miku={self.settings.miku_bot_id}, "
+            f"count={self.settings.teto_fear_message_count}, "
+            f"timeout={self.settings.teto_wait_miku_timeout_seconds}s"
+        )
 
     def _active_chat_model(self) -> str:
         if self.settings.provider == "gemini":

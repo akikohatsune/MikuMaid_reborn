@@ -4,11 +4,19 @@ import base64
 import json
 import mimetypes
 import re
+from collections import deque
 from typing import cast
 
 import discord
 from discord.ext import commands, tasks
 
+try:
+    from cogs.chat_hooks.teto_miku_interaction import TetoMikuDualMentionHook
+except Exception as exc:  # pragma: no cover - optional local module
+    TetoMikuDualMentionHook = None  # type: ignore[assignment]
+    HOOK_IMPORT_ERROR: Exception | None = exc
+else:
+    HOOK_IMPORT_ERROR = None
 from config import Settings
 from client import ChatMessage, ImageInput, LLMClient
 from logger.chat_logger import ChatReplayLogger
@@ -17,6 +25,7 @@ from memory_store import ShortTermMemoryStore
 
 class AIChatCog(commands.Cog):
     CLEANUP_INTERVAL_SECONDS = 60
+    DELETED_TRACK_LIMIT = 2000
     DEFAULT_PROMPT = "hi"
     DEFAULT_MENTION_PROMPT = "hi"
     SUPPORTED_PREFIX_COMMANDS = {"chat", "ask"}
@@ -41,6 +50,18 @@ class AIChatCog(commands.Cog):
         )
         self.replay_logger = ChatReplayLogger(settings.chat_replay_log_path)
         self.is_terminated = False
+        self.deleted_message_ids: set[int] = set()
+        self.deleted_message_order: deque[int] = deque()
+        self.message_hooks: list[object] = []
+        if TetoMikuDualMentionHook is None:
+            print(f"[chat-hook] disabled: import failed: {HOOK_IMPORT_ERROR}")
+        else:
+            try:
+                self.message_hooks.append(
+                    TetoMikuDualMentionHook(bot=bot, settings=settings)
+                )
+            except Exception as exc:
+                print(f"[chat-hook] disabled: init failed: {exc}")
         replay_prefix = re.escape(self.settings.command_prefix)
         self.inline_replay_pattern = re.compile(
             rf"^{replay_prefix}replaymiku(\d+)$",
@@ -58,6 +79,10 @@ class AIChatCog(commands.Cog):
     async def cog_unload(self) -> None:
         if self.cleanup_inactive_memory.is_running():
             self.cleanup_inactive_memory.cancel()
+        for hook in self.message_hooks:
+            closer = getattr(hook, "aclose", None)
+            if callable(closer):
+                await closer()
         await self.chat_memory.close()
         await self.ban_store.close()
         await self.callnames_store.close()
@@ -199,6 +224,10 @@ class AIChatCog(commands.Cog):
         user_display: str,
         trigger: str,
     ) -> None:
+        source_message_id = source_message.id if source_message else None
+        if source_message_id is not None and source_message_id in self.deleted_message_ids:
+            return
+
         effective_prompt = self._normalize_prompt(prompt, fallback_prompt)
         async with self._typing_context(target):
             try:
@@ -215,6 +244,9 @@ class AIChatCog(commands.Cog):
                 await self._send_error(target, exc)
                 return
 
+        if source_message_id is not None and source_message_id in self.deleted_message_ids:
+            return
+
         guild_name, channel_name = self._resolve_scope_names(target, source_message)
         await self.replay_logger.log_chat(
             guild_id=guild_id,
@@ -229,6 +261,15 @@ class AIChatCog(commands.Cog):
             reply_length=len(reply),
         )
         await self._send_long_message(target, reply)
+
+    def _track_deleted_message(self, message_id: int) -> None:
+        if message_id in self.deleted_message_ids:
+            return
+        self.deleted_message_ids.add(message_id)
+        self.deleted_message_order.append(message_id)
+        while len(self.deleted_message_order) > self.DELETED_TRACK_LIMIT:
+            expired = self.deleted_message_order.popleft()
+            self.deleted_message_ids.discard(expired)
 
     def _resolve_scope_names(
         self,
@@ -275,6 +316,18 @@ class AIChatCog(commands.Cog):
 
     async def _is_owner(self, user: discord.abc.User) -> bool:
         return await self.bot.is_owner(user)
+
+    async def _run_message_hooks(self, message: discord.Message) -> bool:
+        for hook in self.message_hooks:
+            try:
+                handler = getattr(hook, "handle_message", None)
+                if handler is None:
+                    continue
+                if await handler(message):
+                    return True
+            except Exception as exc:
+                print(f"[chat-hook] error: {exc}")
+        return False
 
     def _extract_inline_replay_id(self, content: str) -> int | None:
         matched = self.inline_replay_pattern.match(content.strip())
@@ -487,12 +540,19 @@ class AIChatCog(commands.Cog):
         await self._send_long_message(ctx, payload)
 
     @commands.Cog.listener()
+    async def on_raw_message_delete(
+        self,
+        payload: discord.RawMessageDeleteEvent,
+    ) -> None:
+        self._track_deleted_message(payload.message_id)
+
+    @commands.Cog.listener()
     async def on_message(self, message: discord.Message) -> None:
-        if message.author.bot:
+        if message.id in self.deleted_message_ids:
             return
 
         replay_id = self._extract_inline_replay_id(message.content)
-        if replay_id is not None:
+        if replay_id is not None and not message.author.bot:
             if not await self._is_owner(message.author):
                 await message.reply(
                     "Only the bot owner can use this command.",
@@ -506,20 +566,27 @@ class AIChatCog(commands.Cog):
             await self._send_long_message(message, payload)
             return
 
-        if self._looks_like_chat_command(message.content):
-            return
-
         me = cast(discord.ClientUser | None, self.bot.user)
         if me is None:
             return
 
-        if await self._is_banned_user(
-            guild_id=message.guild.id if message.guild else None,
-            user_id=message.author.id,
-        ):
-            return
+        if not message.author.bot:
+            if await self._is_banned_user(
+                guild_id=message.guild.id if message.guild else None,
+                user_id=message.author.id,
+            ):
+                return
 
         if self.is_terminated:
+            return
+
+        if await self._run_message_hooks(message):
+            return
+
+        if message.author.bot:
+            return
+
+        if self._looks_like_chat_command(message.content):
             return
 
         # Bot auto-reply when mentioned directly.

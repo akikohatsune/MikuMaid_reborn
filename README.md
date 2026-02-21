@@ -25,7 +25,7 @@ This project focuses on:
 
 **Default personality:**
 - Miku is playful, friendly, and helpful.
-- Miku replies in the same language as the user's latest message.
+- Miku defaults to English unless the user explicitly asks for another language.
 
 ## 1) Setup
 

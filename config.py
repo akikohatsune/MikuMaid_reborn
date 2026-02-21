@@ -43,6 +43,11 @@ class Settings:
     max_reply_chars: int
     temperature: float
     max_history: int
+    dual_mention_hook_enabled: bool
+    teto_bot_id: int
+    miku_bot_id: int
+    teto_fear_message_count: int
+    teto_wait_miku_timeout_seconds: int
 
 
 def _get_env_str(name: str, default: str) -> str:
@@ -123,7 +128,7 @@ def get_settings() -> Settings:
 
     base_system_prompt = _get_env_str(
         "SYSTEM_PROMPT",
-        "You are Miku, a playful AI assistant on Discord. Reply in the same language as the user's latest message. Keep a light, fun tone while staying helpful and respectful.",
+        "You are Miku, a playful AI assistant on Discord. Default to English unless the user explicitly asks for another language. Keep a light, fun tone while staying helpful and respectful.",
     )
     system_rules_json = _get_env_str("SYSTEM_RULES_JSON", "system_rules.json")
     rules_prompt = _load_system_rules_prompt(system_rules_json)
@@ -222,4 +227,13 @@ def get_settings() -> Settings:
         max_reply_chars=_get_env_int("MAX_REPLY_CHARS", 1800, minimum=100),
         temperature=_get_env_float("TEMPERATURE", 0.7),
         max_history=_get_env_int("MAX_HISTORY", 10, minimum=1),
+        dual_mention_hook_enabled=_get_env_bool("DUAL_MENTION_HOOK_ENABLED", True),
+        teto_bot_id=_get_env_int("TETO_BOT_ID", 1474702560886652959, minimum=1),
+        miku_bot_id=_get_env_int("MIKU_BOT_ID", 1373458132851888128, minimum=1),
+        teto_fear_message_count=_get_env_int("TETO_FEAR_MESSAGE_COUNT", 7, minimum=1),
+        teto_wait_miku_timeout_seconds=_get_env_int(
+            "TETO_WAIT_MIKU_TIMEOUT_SECONDS",
+            20,
+            minimum=1,
+        ),
     )

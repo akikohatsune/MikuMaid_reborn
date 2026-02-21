@@ -11,12 +11,16 @@ import discord
 from discord.ext import commands, tasks
 
 try:
-    from cogs.chat_hooks.teto_miku_interaction import TetoMikuDualMentionHook
+    from cogs.chat_hooks.miku_fear_line_generator import (
+        MikuFearLineGenerator,
+        TetoMikuDualMentionHook,
+    )
 except Exception as exc:  # pragma: no cover - optional local module
     TetoMikuDualMentionHook = None  # type: ignore[assignment]
-    HOOK_IMPORT_ERROR: Exception | None = exc
+    MikuFearLineGenerator = None  # type: ignore[assignment]
+    HOOKS_IMPORT_ERROR: Exception | None = exc
 else:
-    HOOK_IMPORT_ERROR = None
+    HOOKS_IMPORT_ERROR = None
 from config import Settings
 from client import ChatMessage, ImageInput, LLMClient
 from logger.chat_logger import ChatReplayLogger
@@ -53,12 +57,22 @@ class AIChatCog(commands.Cog):
         self.deleted_message_ids: set[int] = set()
         self.deleted_message_order: deque[int] = deque()
         self.message_hooks: list[object] = []
+        self.miku_fear_line_generator: MikuFearLineGenerator | None = None
         if TetoMikuDualMentionHook is None:
-            print(f"[chat-hook] disabled: import failed: {HOOK_IMPORT_ERROR}")
+            print(f"[chat-hook] disabled: import failed: {HOOKS_IMPORT_ERROR}")
         else:
             try:
+                self.miku_fear_line_generator = MikuFearLineGenerator(
+                    client=self.client,
+                    settings=settings,
+                    normalize_model_reply=self._normalize_model_reply,
+                )
                 self.message_hooks.append(
-                    TetoMikuDualMentionHook(bot=bot, settings=settings)
+                    TetoMikuDualMentionHook(
+                        bot=bot,
+                        settings=settings,
+                        build_miku_tease_lines=self.miku_fear_line_generator.generate_miku_tease_lines,
+                    )
                 )
             except Exception as exc:
                 print(f"[chat-hook] disabled: init failed: {exc}")

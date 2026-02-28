@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+import logging
 import mimetypes
 import re
 from collections import deque
@@ -25,6 +26,8 @@ from client import ChatMessage, ImageInput, LLMClient
 from logger.chat_logger import ChatReplayLogger
 from memory_store import ShortTermMemoryStore
 
+LOGGER = logging.getLogger(__name__)
+
 
 class AIChatCog(commands.Cog):
     CLEANUP_INTERVAL_SECONDS = 60
@@ -34,6 +37,7 @@ class AIChatCog(commands.Cog):
     SUPPORTED_PREFIX_COMMANDS = {"chat", "ask"}
     EVERYONE_MENTION_PATTERN = re.compile(r"@everyone", flags=re.IGNORECASE)
     HERE_MENTION_PATTERN = re.compile(r"@here", flags=re.IGNORECASE)
+    OVERLOAD_REPLY = "i overload!"
 
     def __init__(self, bot: commands.Bot, settings: Settings):
         self.bot = bot
@@ -321,7 +325,8 @@ class AIChatCog(commands.Cog):
         target: commands.Context[commands.Bot] | discord.Message,
         exc: Exception,
     ) -> None:
-        message = f"Error while calling AI: `{exc}`"
+        LOGGER.exception("AI reply failed: %s", exc)
+        message = self.OVERLOAD_REPLY
         if isinstance(target, commands.Context):
             await target.reply(message, mention_author=False)
             return

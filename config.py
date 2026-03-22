@@ -28,7 +28,6 @@ class Settings:
     gemini_approval_model: str
     groq_api_key: str | None
     groq_model: str
-    groq_vision_model: str
     openai_api_key: str | None
     openai_model: str
     local_api_key: str | None
@@ -144,7 +143,6 @@ def get_settings() -> Settings:
         DEFAULT_GEMINI_APPROVAL_MODEL,
     )
     groq_model = _get_env_str("GROQ_MODEL", "llama-3.3-70b-versatile")
-    groq_vision_model = _get_env_str("GROQ_VISION_MODEL", "llama-3.2-90b-vision-preview")
     openai_model = _get_env_str("OPENAI_MODEL", DEFAULT_OPENAI_MODEL)
     
     local_model = _get_env_str("LOCAL_MODEL", "llava") # Default common vision model
@@ -228,7 +226,6 @@ def get_settings() -> Settings:
         gemini_approval_model=gemini_approval_model,
         groq_api_key=groq_api_key,
         groq_model=groq_model,
-        groq_vision_model=groq_vision_model,
         openai_api_key=openai_api_key,
         openai_model=openai_model,
         local_api_key=local_api_key,

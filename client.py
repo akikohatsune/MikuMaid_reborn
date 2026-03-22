@@ -208,16 +208,8 @@ class LLMClient:
         if self.groq_client is None:
             raise RuntimeError("Missing GROQ_API_KEY")
 
-        # Select model based on whether images are present
-        has_images = any(msg.get("images") for msg in messages)
-        model = (
-            self.settings.groq_vision_model
-            if has_images
-            else self.settings.groq_model
-        )
-
         chat_completion = await self.groq_client.chat.completions.create(
-            model=model,
+            model=self.settings.groq_model,
             messages=self._build_openai_style_messages(messages),
             temperature=self.settings.temperature,
         )

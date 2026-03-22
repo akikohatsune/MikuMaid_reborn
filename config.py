@@ -7,8 +7,8 @@ from dotenv import load_dotenv
 
 
 load_dotenv()
-DEFAULT_GEMINI_MODEL = "gemini-3-flash"
-DEFAULT_GEMINI_APPROVAL_MODEL = "gemini-3-flash"
+DEFAULT_GEMINI_MODEL = "gemini-1.5-flash"
+DEFAULT_GEMINI_APPROVAL_MODEL = "gemini-1.5-flash"
 DEFAULT_OPENAI_MODEL = "gpt-4o-mini"
 
 
@@ -28,6 +28,7 @@ class Settings:
     gemini_approval_model: str
     groq_api_key: str | None
     groq_model: str
+    groq_vision_model: str
     openai_api_key: str | None
     openai_model: str
     system_prompt: str
@@ -137,6 +138,7 @@ def get_settings() -> Settings:
         DEFAULT_GEMINI_APPROVAL_MODEL,
     )
     groq_model = _get_env_str("GROQ_MODEL", "llama-3.3-70b-versatile")
+    groq_vision_model = _get_env_str("GROQ_VISION_MODEL", "llama-3.2-90b-vision-preview")
     openai_model = _get_env_str("OPENAI_MODEL", DEFAULT_OPENAI_MODEL)
     gemini_api_key = _get_env_str("GEMINI_API_KEY", "") or None
     groq_api_key = _get_env_str("GROQ_API_KEY", "") or None

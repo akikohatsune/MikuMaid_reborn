@@ -126,9 +126,13 @@ class AIChatCog(commands.Cog):
 
     async def _load_history_messages(self, channel_id: int) -> list[ChatMessage]:
         history_raw = await self.chat_memory.get_history(channel_id)
-        return [
-            {"role": msg["role"], "content": msg["content"]} for msg in history_raw
-        ]
+        history: list[ChatMessage] = []
+        for msg in history_raw:
+            entry: ChatMessage = {"role": msg["role"], "content": msg["content"]}
+            if "images" in msg and msg["images"]:
+                entry["images"] = msg["images"]
+            history.append(entry)
+        return history
 
     def _normalize_prompt(self, prompt: str, fallback: str) -> str:
         return prompt.strip() or fallback
@@ -183,6 +187,7 @@ class AIChatCog(commands.Cog):
             channel_id,
             "user",
             self._memory_user_entry(normalized_prompt, len(image_inputs)),
+            images=image_inputs if image_inputs else None,
         )
         await self.chat_memory.append_message(channel_id, "assistant", reply)
         return reply

@@ -116,9 +116,18 @@ class LLMClient:
     async def _call_groq(self, messages: list[ChatMessage]) -> str:
         if self.groq_client is None:
             raise RuntimeError("Missing GROQ_API_KEY")
+
+        # Select model based on whether images are present
+        has_images = any(msg.get("images") for msg in messages)
+        model = (
+            self.settings.groq_vision_model
+            if has_images
+            else self.settings.groq_model
+        )
+
         chat_completion = await self.groq_client.chat.completions.create(
-            model=self.settings.groq_model,
-            messages=self._build_groq_messages(messages),
+            model=model,
+            messages=self._build_openai_style_messages(messages),
             temperature=self.settings.temperature,
         )
         message = chat_completion.choices[0].message
@@ -134,7 +143,7 @@ class LLMClient:
             raise RuntimeError("Missing OPENAI_API_KEY")
         chat_completion = await self.openai_client.chat.completions.create(
             model=self.settings.openai_model,
-            messages=self._build_openai_messages(messages),
+            messages=self._build_openai_style_messages(messages),
             temperature=self.settings.temperature,
         )
         message = chat_completion.choices[0].message
@@ -155,29 +164,7 @@ class LLMClient:
                 contents.append(genai_types.Content(role=role, parts=parts))
         return contents
 
-    def _build_groq_messages(
-        self,
-        messages: list[ChatMessage],
-    ) -> list[dict[str, Any]]:
-        groq_messages: list[dict[str, Any]] = [
-            {"role": "system", "content": self.settings.system_prompt}
-        ]
-        for msg in messages:
-            text = msg.get("content", "").strip()
-            images = msg.get("images", [])
-            if images:
-                parts: list[dict[str, Any]] = []
-                if text:
-                    parts.append({"type": "text", "text": text})
-                for image in images:
-                    data_url = f"data:{image['mime_type']};base64,{image['data_b64']}"
-                    parts.append({"type": "image_url", "image_url": {"url": data_url}})
-                groq_messages.append({"role": msg["role"], "content": parts})
-            elif text:
-                groq_messages.append({"role": msg["role"], "content": text})
-        return groq_messages
-
-    def _build_openai_messages(
+    def _build_openai_style_messages(
         self,
         messages: list[ChatMessage],
     ) -> list[dict[str, Any]]:
@@ -193,7 +180,13 @@ class LLMClient:
                     parts.append({"type": "text", "text": text})
                 for image in images:
                     data_url = f"data:{image['mime_type']};base64,{image['data_b64']}"
-                    parts.append({"type": "image_url", "image_url": {"url": data_url}})
+                    parts.append({
+                        "type": "image_url", 
+                        "image_url": {
+                            "url": data_url,
+                            "detail": "high"
+                        }
+                    })
                 openai_messages.append({"role": msg["role"], "content": parts})
             elif text:
                 openai_messages.append({"role": msg["role"], "content": text})

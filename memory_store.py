@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from pathlib import Path
 
 import aiosqlite
@@ -27,10 +28,17 @@ class ShortTermMemoryStore:
                 channel_id INTEGER NOT NULL,
                 role TEXT NOT NULL,
                 content TEXT NOT NULL,
+                images_json TEXT,
                 created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
             )
             """
         )
+        # Migration: Add images_json column if it doesn't exist
+        async with self._conn.execute("PRAGMA table_info(chat_memory)") as cursor:
+            columns = [row[1] for row in await cursor.fetchall()]
+            if "images_json" not in columns:
+                await self._conn.execute("ALTER TABLE chat_memory ADD COLUMN images_json TEXT")
+
         await self._conn.execute(
             """
             CREATE TABLE IF NOT EXISTS bot_banned_users (
@@ -73,25 +81,33 @@ class ShortTermMemoryStore:
             await self._conn.close()
             self._conn = None
 
-    async def append_message(self, channel_id: int, role: str, content: str) -> None:
+    async def append_message(
+        self,
+        channel_id: int,
+        role: str,
+        content: str,
+        images: list[dict[str, Any]] | None = None,
+    ) -> None:
         if role not in {"user", "assistant"}:
             raise ValueError(f"Invalid role: {role}")
+
+        images_json = json.dumps(images) if images else None
 
         async with self._lock:
             conn = self._require_conn()
             await conn.execute(
-                "INSERT INTO chat_memory (channel_id, role, content) VALUES (?, ?, ?)",
-                (channel_id, role, content),
+                "INSERT INTO chat_memory (channel_id, role, content, images_json) VALUES (?, ?, ?, ?)",
+                (channel_id, role, content, images_json),
             )
             await self._trim_channel(channel_id)
             await conn.commit()
 
-    async def get_history(self, channel_id: int) -> list[dict[str, str]]:
+    async def get_history(self, channel_id: int) -> list[dict[str, Any]]:
         async with self._lock:
             conn = self._require_conn()
             cursor = await conn.execute(
                 """
-                SELECT role, content
+                SELECT role, content, images_json
                 FROM chat_memory
                 WHERE channel_id = ?
                 ORDER BY id DESC
@@ -103,7 +119,20 @@ class ShortTermMemoryStore:
             await cursor.close()
 
         rows.reverse()
-        return [{"role": row[0], "content": row[1]} for row in rows]
+        history = []
+        for row in rows:
+            images = None
+            if row[2]:
+                try:
+                    images = json.loads(row[2])
+                except (json.JSONDecodeError, TypeError):
+                    images = None
+            
+            entry: dict[str, Any] = {"role": row[0], "content": row[1]}
+            if images:
+                entry["images"] = images
+            history.append(entry)
+        return history
 
     async def clear_channel(self, channel_id: int) -> None:
         async with self._lock:

@@ -122,7 +122,49 @@ class MikuAIBot(commands.Bot):
         return "unknown"
 
 
+def _auto_merge_dotenv() -> None:
+    """Synchronize missing keys from .env.example to .env."""
+    try:
+        example_path = Path(__file__).parent / ".env.example"
+        env_path = Path(__file__).parent / ".env"
+
+        if not example_path.exists():
+            return
+        
+        # Create .env if it doesn't exist
+        if not env_path.exists():
+            env_path.touch()
+
+        # Read keys
+        with open(example_path, "r", encoding="utf-8") as f:
+            example_keys = {line.split("=")[0].strip() for line in f if "=" in line and not line.strip().startswith("#")}
+        with open(env_path, "r", encoding="utf-8") as f:
+            env_keys = {line.split("=")[0].strip() for line in f if "=" in line and not line.strip().startswith("#")}
+
+        missing_keys = example_keys - env_keys
+        
+        if not missing_keys:
+            return
+
+        print(f"Auto-merging {len(missing_keys)} missing keys from .env.example into .env...")
+        
+        # Append missing keys
+        with open(env_path, "a", encoding="utf-8") as f:
+            f.write("\n\n# Auto-merged from .env.example\n")
+            with open(example_path, "r", encoding="utf-8") as f_example:
+                for line in f_example:
+                    key = line.split("=")[0].strip()
+                    if key in missing_keys:
+                        f.write(line)
+        
+        print("Merge complete. Please review the new keys in your .env file.")
+
+    except Exception as e:
+        print(f"Warning: Could not auto-merge .env file: {e}")
+
+
 async def main() -> None:
+    _auto_merge_dotenv()
     settings = get_settings()
     bot = MikuAIBot(settings)
     await bot.start(settings.discord_token)

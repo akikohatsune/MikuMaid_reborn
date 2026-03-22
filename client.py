@@ -65,10 +65,101 @@ class LLMClient:
             "groq": self._call_groq,
             "openai": self._call_openai,
         }
-        handler = handlers.get(self.settings.provider)
+        provider = self.settings.provider
+        has_images = any(msg.get("images") for msg in messages)
+
+        # [Two-Step Vision Logic]
+        # Only use this if explicitly enabled AND provider is NOT Gemini
+        if (
+            has_images 
+            and self.settings.use_two_step_vision 
+            and provider != "gemini" 
+            and self.gemini_client
+        ):
+            try:
+                print(f"[vision] Two-Step Vision enabled: Self-model (Gemini) is performing OCR/analysis...")
+                # Get a description of the images from Gemini
+                visual_context = await self._describe_images_with_gemini(messages)
+                
+                # Transform messages: remove raw images and append the visual description to the last user message
+                messages = self._inject_visual_context_into_messages(messages, visual_context)
+                print(f"[vision] Visual context injected. Sending text task to {provider}.")
+                
+                # Now we proceed as a text-only task
+                has_images = False 
+            except Exception as exc:
+                print(f"[vision] OCR/Self-model analysis failed, attempting direct vision: {exc}")
+                # Fallback to direct vision if OCR step fails
+
+        # Regular path (now text-only if OCR was successful)
+        handler = handlers.get(provider)
         if handler is None:
-            raise RuntimeError(f"Unsupported provider: {self.settings.provider}")
-        return await handler(messages)
+            raise RuntimeError(f"Unsupported provider: {provider}")
+
+        try:
+            return await handler(messages)
+        except Exception as exc:
+            # Final fallback to direct Gemini vision if anything failed
+            if (
+                has_images 
+                and provider != "gemini" 
+                and self.settings.vision_fallback_enabled 
+                and self.gemini_client
+            ):
+                print(f"[vision-fallback] {provider} failed, retrying with direct gemini: {exc}")
+                try:
+                    return await self._call_gemini(messages)
+                except Exception as gexc:
+                    raise RuntimeError(f"Both {provider} and Gemini fallback failed. Gemini error: {gexc}") from exc
+            
+            raise
+
+    async def _describe_images_with_gemini(self, messages: list[ChatMessage]) -> str:
+        """Internal helper to get a high-quality description/OCR from the self-model."""
+        # We only send the messages that contain images to Gemini for description
+        # but usually the latest message is enough. For simplicity, we send the whole history.
+        response = await self.gemini_client.aio.models.generate_content(
+            model=self.settings.gemini_model,
+            contents=self._build_gemini_contents(messages),
+            config=genai_types.GenerateContentConfig(
+                temperature=0.2, # Lower temperature for accurate OCR
+                system_instruction=(
+                    "You are a visual analysis model. "
+                    "Analyze the attached images and provide a comprehensive, accurate description for another AI to process. "
+                    "Describe:\n"
+                    "- Who/what is in the image\n"
+                    "- Style (anime, real, game, etc.)\n"
+                    "- Context (scene, event, emotion)\n"
+                    "- Any recognizable characters, logos, or references\n"
+                    "- Any visible text (OCR), colors, objects, and layout details.\n"
+                    "Be detailed, specific, and objective. Do not engage in conversation, just describe."
+                ),
+            ),
+        )
+        return self._extract_gemini_text(response, context="Gemini OCR")
+
+    def _inject_visual_context_into_messages(
+        self, 
+        messages: list[ChatMessage], 
+        visual_context: str
+    ) -> list[ChatMessage]:
+        """Removes images and injects text description into the message list."""
+        new_messages: list[ChatMessage] = []
+        for i, msg in enumerate(messages):
+            # Clone message without images
+            new_msg: ChatMessage = {"role": msg["role"], "content": msg.get("content", "")}
+            
+            # If it's the last user message, append the visual context
+            if i == len(messages) - 1 and msg["role"] == "user":
+                prompt = new_msg["content"]
+                new_msg["content"] = (
+                    f"{prompt}\n\n"
+                    f"[VISUAL_CONTEXT_FROM_SELF_MODEL]\n"
+                    f"{visual_context}\n"
+                    f"[/VISUAL_CONTEXT]"
+                )
+            new_messages.append(new_msg)
+        return new_messages
 
     async def approve_call_name(self, field_name: str, value: str) -> bool:
         raw = await self._approve_call_name_gemini(field_name, value)

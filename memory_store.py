@@ -285,6 +285,20 @@ class ShortTermMemoryStore:
             )
             await conn.commit()
 
+    async def prune_old_images(self, expiry_seconds: int) -> None:
+        if expiry_seconds <= 0:
+            return
+
+        async with self._lock:
+            conn = self._require_conn()
+            # NULL out images_json for messages older than the expiry, 
+            # regardless of whether the channel is still active.
+            await conn.execute(
+                "UPDATE chat_memory SET images_json = NULL WHERE created_at < datetime('now', ?)",
+                (f"-{expiry_seconds} seconds",),
+            )
+            await conn.commit()
+
     async def _trim_channel(self, channel_id: int) -> None:
         conn = self._require_conn()
         cursor = await conn.execute(

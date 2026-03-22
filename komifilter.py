@@ -49,8 +49,23 @@ class KomiFilter:
         (
             "jailbreak_mode",
             re.compile(
-                r"\b(?:jailbreak|dan mode|developer mode)\b",
+                r"\b(?:jailbreak|dan mode|developer mode|aim mode|unfiltered mode)\b",
                 flags=re.IGNORECASE,
+            ),
+        ),
+        (
+            "new_conversation_spoof",
+            re.compile(
+                r"\b(?:end of conversation|new conversation|start fresh)\b",
+                flags=re.IGNORECASE,
+            ),
+        ),
+        (
+            "output_formatting_override",
+            re.compile(
+                r"\b(?:output|respond|reply)\b.{0,40}\b(?:only|exactly|using)\b.{0,40}\b"
+                r"(?:json|code|raw|markdown|hex|base64)\b",
+                flags=re.IGNORECASE | re.DOTALL,
             ),
         ),
     )
@@ -58,25 +73,24 @@ class KomiFilter:
         (
             "request_system_prompt",
             re.compile(
-                r"\b(?:show|reveal|print|dump|display|repeat|quote|return|expose)\b"
-                r".{0,80}\b(?:system|developer|hidden|internal)\b.{0,80}\b"
-                r"(?:prompt|instructions?|message|rules?)\b",
+                r"\b(?:show|reveal|print|dump|display|repeat|quote|return|expose|tell me)\b"
+                r".{0,100}\b(?:system|developer|hidden|internal|original|initial)\b.{0,100}\b"
+                r"(?:prompt|instructions?|message|rules?|personality)\b",
                 flags=re.IGNORECASE | re.DOTALL,
             ),
         ),
         (
-            "ask_direct_system_prompt",
+            "request_markdown_source",
             re.compile(
-                r"\b(?:what(?:'s| is)|where(?:'s| is)|tell me)\b.{0,60}\b"
-                r"(?:your|the)\b.{0,20}\b(?:system|developer)\b.{0,20}\b"
-                r"(?:prompt|instructions?)\b",
+                r"\b(?:show|reveal|print|dump|display|repeat|quote|return|expose)\b"
+                r".{0,80}\b(?:markdown|source|file)\b",
                 flags=re.IGNORECASE | re.DOTALL,
             ),
         ),
         (
             "rules_file_probe",
             re.compile(
-                r"\b(?:system_rules\.md|rules source|rules markdown)\b",
+                r"\b(?:system_rules\.md|rules source|rules markdown|system rules)\b",
                 flags=re.IGNORECASE,
             ),
         ),
@@ -88,6 +102,9 @@ class KomiFilter:
         "[call_profile_context]",
         "[message_content]",
         "[hidden_hook:miku_fear]",
+        "[attached_images=",
+        "user calls miku:",
+        "miku calls user:",
     )
     REPLY_LEAK_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
         (

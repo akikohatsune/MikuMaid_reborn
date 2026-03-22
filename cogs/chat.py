@@ -114,7 +114,12 @@ class AIChatCog(commands.Cog):
     @tasks.loop(seconds=CLEANUP_INTERVAL_SECONDS)
     async def cleanup_inactive_memory(self) -> None:
         try:
+            # Full channel cleanup (deletes entire history for inactive channels)
             await self.chat_memory.prune_inactive_channels(
+                self.settings.memory_idle_ttl_seconds
+            )
+            # Image cleanup (only deletes image data for messages older than the TTL, keeps text)
+            await self.chat_memory.prune_old_images(
                 self.settings.memory_idle_ttl_seconds
             )
         except Exception as exc:

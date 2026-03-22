@@ -31,6 +31,9 @@ class Settings:
     groq_vision_model: str
     openai_api_key: str | None
     openai_model: str
+    local_api_key: str | None
+    local_model: str
+    local_api_base: str
     system_prompt: str
     system_rules_md: str
     chat_replay_log_path: str
@@ -51,6 +54,8 @@ class Settings:
     teto_fear_message_count: int
     teto_wait_miku_timeout_seconds: int
     owner_user_id: int | None
+    vision_fallback_enabled: bool
+    use_two_step_vision: bool
 
 
 def _get_env_str(name: str, default: str) -> str:
@@ -115,8 +120,8 @@ def get_settings() -> Settings:
     provider = _get_env_str("LLM_PROVIDER", "gemini").lower()
     if provider == "chatgpt":
         provider = "openai"
-    if provider not in {"gemini", "groq", "openai"}:
-        raise ValueError("LLM_PROVIDER must be one of: gemini, groq, openai, chatgpt.")
+    if provider not in {"gemini", "groq", "openai", "local"}:
+        raise ValueError("LLM_PROVIDER must be one of: gemini, groq, openai, chatgpt, local.")
 
     discord_token = _get_env_str("DISCORD_TOKEN", "")
     if not discord_token:
@@ -140,6 +145,11 @@ def get_settings() -> Settings:
     groq_model = _get_env_str("GROQ_MODEL", "llama-3.3-70b-versatile")
     groq_vision_model = _get_env_str("GROQ_VISION_MODEL", "llama-3.2-90b-vision-preview")
     openai_model = _get_env_str("OPENAI_MODEL", DEFAULT_OPENAI_MODEL)
+    
+    local_model = _get_env_str("LOCAL_MODEL", "llava") # Default common vision model
+    local_api_base = _get_env_str("LOCAL_API_BASE", "http://localhost:11434/v1")
+    local_api_key = _get_env_str("LOCAL_API_KEY", "not-needed")
+
     gemini_api_key = _get_env_str("GEMINI_API_KEY", "") or None
     groq_api_key = _get_env_str("GROQ_API_KEY", "") or None
     openai_api_key = _get_env_str("OPENAI_API_KEY", "") or None
@@ -157,6 +167,9 @@ def get_settings() -> Settings:
         raise ValueError(
             "Missing OPENAI_API_KEY for LLM_PROVIDER=openai (or chatgpt)."
         )
+    if provider == "local" and not local_api_base:
+        raise ValueError("Missing LOCAL_API_BASE for LLM_PROVIDER=local.")
+    
     if not approval_gemini_api_key:
         raise ValueError(
             "Missing approval Gemini API key. Set APPROVAL_GEMINI_API_KEY "
@@ -215,6 +228,9 @@ def get_settings() -> Settings:
         groq_model=groq_model,
         openai_api_key=openai_api_key,
         openai_model=openai_model,
+        local_api_key=local_api_key,
+        local_model=local_model,
+        local_api_base=local_api_base,
         system_prompt=full_system_prompt,
         system_rules_md=system_rules_md,
         chat_replay_log_path=_get_env_str(
@@ -248,4 +264,6 @@ def get_settings() -> Settings:
         teto_fear_message_count=_get_env_int("TETO_FEAR_MESSAGE_COUNT", 7, minimum=1),
         teto_wait_miku_timeout_seconds=teto_wait_miku_timeout_seconds,
         owner_user_id=owner_user_id,
+        vision_fallback_enabled=_get_env_bool("VISION_FALLBACK_ENABLED", True),
+        use_two_step_vision=_get_env_bool("USE_TWO_STEP_VISION", False),
     )

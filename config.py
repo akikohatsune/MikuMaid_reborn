@@ -53,7 +53,7 @@ class Settings:
     miku_bot_id: int
     teto_fear_message_count: int
     teto_wait_miku_timeout_seconds: int
-    owner_user_id: int | None
+    owner_id: int | None
     vision_fallback_enabled: bool
     use_two_step_vision: bool
     restart_interval_hours: int
@@ -209,7 +209,8 @@ def get_settings() -> Settings:
         20,
         minimum=1,
     )
-    owner_user_id = int(owner_user_id_raw) if owner_user_id_raw.isdigit() else None
+    owner_id_raw = os.getenv("OWNER_USER_ID", "").strip()
+    owner_id = int(owner_id_raw) if owner_id_raw.isdigit() else None
     restart_interval_hours = _get_env_int("RESTART_INTERVAL_HOURS", 12, minimum=0)
 
     return Settings(
@@ -265,7 +266,7 @@ def get_settings() -> Settings:
         miku_bot_id=_get_env_int("MIKU_BOT_ID", 1373458132851888128, minimum=1),
         teto_fear_message_count=_get_env_int("TETO_FEAR_MESSAGE_COUNT", 7, minimum=1),
         teto_wait_miku_timeout_seconds=teto_wait_miku_timeout_seconds,
-        owner_user_id=owner_user_id,
+        owner_id=owner_id,
         vision_fallback_enabled=_get_env_bool("VISION_FALLBACK_ENABLED", True),
         use_two_step_vision=_get_env_bool("USE_TWO_STEP_VISION", False),
         restart_interval_hours=restart_interval_hours,

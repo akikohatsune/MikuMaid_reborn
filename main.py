@@ -20,7 +20,7 @@ class MikuAIBot(commands.Bot):
             intents=intents,
             help_command=commands.DefaultHelpCommand(),
             allowed_mentions=discord.AllowedMentions.none(),
-            owner_id=settings.owner_user_id,
+            owner_id=settings.owner_id,
         )
         self.settings = settings
 

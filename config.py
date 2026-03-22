@@ -56,6 +56,7 @@ class Settings:
     owner_user_id: int | None
     vision_fallback_enabled: bool
     use_two_step_vision: bool
+    restart_interval_hours: int
 
 
 def _get_env_str(name: str, default: str) -> str:
@@ -208,8 +209,8 @@ def get_settings() -> Settings:
         20,
         minimum=1,
     )
-    owner_user_id_raw = os.getenv("OWNER_USER_ID", "").strip()
     owner_user_id = int(owner_user_id_raw) if owner_user_id_raw.isdigit() else None
+    restart_interval_hours = _get_env_int("RESTART_INTERVAL_HOURS", 12, minimum=0)
 
     return Settings(
         discord_token=discord_token,
@@ -226,6 +227,7 @@ def get_settings() -> Settings:
         gemini_approval_model=gemini_approval_model,
         groq_api_key=groq_api_key,
         groq_model=groq_model,
+        groq_vision_model=groq_vision_model,
         openai_api_key=openai_api_key,
         openai_model=openai_model,
         local_api_key=local_api_key,
@@ -266,4 +268,5 @@ def get_settings() -> Settings:
         owner_user_id=owner_user_id,
         vision_fallback_enabled=_get_env_bool("VISION_FALLBACK_ENABLED", True),
         use_two_step_vision=_get_env_bool("USE_TWO_STEP_VISION", False),
+        restart_interval_hours=restart_interval_hours,
     )

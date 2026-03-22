@@ -7,6 +7,7 @@ import discord
 from discord.ext import commands
 
 from config import Settings, get_settings
+from utils import auto_merge_dotenv
 
 
 class MikuAIBot(commands.Bot):
@@ -23,49 +24,6 @@ class MikuAIBot(commands.Bot):
         )
         self.settings = settings
 
-    def _resolve_rpc_status(self) -> discord.Status:
-        status_map = {
-            "online": discord.Status.online,
-            "idle": discord.Status.idle,
-            "dnd": discord.Status.dnd,
-            "invisible": discord.Status.invisible,
-        }
-        return status_map.get(self.settings.rpc_status, discord.Status.online)
-
-    def _build_rpc_activity(self) -> discord.BaseActivity | None:
-        activity_type = self.settings.rpc_activity_type
-        name = self.settings.rpc_activity_name
-        if activity_type == "none":
-            return None
-        if activity_type == "playing":
-            return discord.Game(name=name)
-        if activity_type == "streaming":
-            return discord.Streaming(name=name, url=self.settings.rpc_activity_url or "")
-
-        discord_activity_map = {
-            "listening": discord.ActivityType.listening,
-            "watching": discord.ActivityType.watching,
-            "competing": discord.ActivityType.competing,
-        }
-        mapped = discord_activity_map.get(activity_type, discord.ActivityType.playing)
-        return discord.Activity(type=mapped, name=name)
-
-    async def _apply_rpc_presence(self) -> None:
-        if not self.settings.rpc_enabled:
-            print("Discord RPC presence: disabled")
-            return
-        status = self._resolve_rpc_status()
-        activity = self._build_rpc_activity()
-        await self.change_presence(status=status, activity=activity)
-        activity_type = self.settings.rpc_activity_type
-        activity_name = self.settings.rpc_activity_name if activity else "(none)"
-        print(
-            "Discord RPC presence applied: "
-            f"status={self.settings.rpc_status}, "
-            f"type={activity_type}, "
-            f"name={activity_name}"
-        )
-
     async def setup_hook(self) -> None:
         cogs_dir = Path(__file__).parent / "cogs"
         for file in sorted(cogs_dir.glob("*.py")):
@@ -76,7 +34,6 @@ class MikuAIBot(commands.Bot):
         print(f"Synced {len(synced)} slash command(s).")
 
     async def on_ready(self) -> None:
-        await self._apply_rpc_presence()
         user = self.user
         user_id = user.id if user else "unknown"
         print(f"Logged in as {user} (ID: {user_id})")
@@ -84,33 +41,10 @@ class MikuAIBot(commands.Bot):
             print(f"Owner ID: {self.owner_id}")
         elif self.owner_ids:
             print(f"Owner IDs: {list(self.owner_ids)}")
+        
         print(f"Provider: {self.settings.provider}")
         print(f"Model: {self._active_chat_model()}")
-        print("Approval provider: gemini (fixed)")
-        print(f"Approval model: {self.settings.gemini_approval_model}")
-        print(f"System rules MD: {self.settings.system_rules_md}")
-        print(f"Chat replay log: {self.settings.chat_replay_log_path}")
-        print(f"Chat memory DB: {self.settings.chat_memory_db_path}")
-        print(f"Ban DB: {self.settings.ban_db_path}")
-        print(f"Callnames DB: {self.settings.callnames_db_path}")
-        print(f"Memory idle TTL: {self.settings.memory_idle_ttl_seconds}s")
-        print(f"Image max bytes: {self.settings.image_max_bytes}")
-        print(f"Max reply chars: {self.settings.max_reply_chars}")
-        print(
-            "KomiFilter: "
-            f"enabled={self.settings.komifilter_enabled}, "
-            f"max_check_chars={self.settings.komifilter_max_check_chars}, "
-            "block_response_on_leak="
-            f"{self.settings.komifilter_block_response_on_leak}"
-        )
-        print(
-            "Dual mention hook: "
-            f"enabled={self.settings.dual_mention_hook_enabled}, "
-            f"teto={self.settings.teto_bot_id}, "
-            f"miku={self.settings.miku_bot_id}, "
-            f"count={self.settings.teto_fear_message_count}, "
-            f"timeout={self.settings.teto_wait_miku_timeout_seconds}s"
-        )
+        print("---")
 
     def _active_chat_model(self) -> str:
         if self.settings.provider == "gemini":
@@ -119,52 +53,13 @@ class MikuAIBot(commands.Bot):
             return self.settings.groq_model
         if self.settings.provider == "openai":
             return self.settings.openai_model
+        if self.settings.provider == "local":
+            return self.settings.local_model
         return "unknown"
 
 
-def _auto_merge_dotenv() -> None:
-    """Synchronize missing keys from .env.example to .env."""
-    try:
-        example_path = Path(__file__).parent / ".env.example"
-        env_path = Path(__file__).parent / ".env"
-
-        if not example_path.exists():
-            return
-        
-        # Create .env if it doesn't exist
-        if not env_path.exists():
-            env_path.touch()
-
-        # Read keys
-        with open(example_path, "r", encoding="utf-8") as f:
-            example_keys = {line.split("=")[0].strip() for line in f if "=" in line and not line.strip().startswith("#")}
-        with open(env_path, "r", encoding="utf-8") as f:
-            env_keys = {line.split("=")[0].strip() for line in f if "=" in line and not line.strip().startswith("#")}
-
-        missing_keys = example_keys - env_keys
-        
-        if not missing_keys:
-            return
-
-        print(f"Auto-merging {len(missing_keys)} missing keys from .env.example into .env...")
-        
-        # Append missing keys
-        with open(env_path, "a", encoding="utf-8") as f:
-            f.write("\n\n# Auto-merged from .env.example\n")
-            with open(example_path, "r", encoding="utf-8") as f_example:
-                for line in f_example:
-                    key = line.split("=")[0].strip()
-                    if key in missing_keys:
-                        f.write(line)
-        
-        print("Merge complete. Please review the new keys in your .env file.")
-
-    except Exception as e:
-        print(f"Warning: Could not auto-merge .env file: {e}")
-
-
 async def main() -> None:
-    _auto_merge_dotenv()
+    auto_merge_dotenv()
     settings = get_settings()
     bot = MikuAIBot(settings)
     await bot.start(settings.discord_token)

@@ -19,6 +19,7 @@ class MikuAIBot(commands.Bot):
             intents=intents,
             help_command=commands.DefaultHelpCommand(),
             allowed_mentions=discord.AllowedMentions.none(),
+            owner_id=settings.owner_user_id,
         )
         self.settings = settings
 
@@ -79,6 +80,10 @@ class MikuAIBot(commands.Bot):
         user = self.user
         user_id = user.id if user else "unknown"
         print(f"Logged in as {user} (ID: {user_id})")
+        if self.owner_id:
+            print(f"Owner ID: {self.owner_id}")
+        elif self.owner_ids:
+            print(f"Owner IDs: {list(self.owner_ids)}")
         print(f"Provider: {self.settings.provider}")
         print(f"Model: {self._active_chat_model()}")
         print("Approval provider: gemini (fixed)")
@@ -91,6 +96,13 @@ class MikuAIBot(commands.Bot):
         print(f"Memory idle TTL: {self.settings.memory_idle_ttl_seconds}s")
         print(f"Image max bytes: {self.settings.image_max_bytes}")
         print(f"Max reply chars: {self.settings.max_reply_chars}")
+        print(
+            "KomiFilter: "
+            f"enabled={self.settings.komifilter_enabled}, "
+            f"max_check_chars={self.settings.komifilter_max_check_chars}, "
+            "block_response_on_leak="
+            f"{self.settings.komifilter_block_response_on_leak}"
+        )
         print(
             "Dual mention hook: "
             f"enabled={self.settings.dual_mention_hook_enabled}, "

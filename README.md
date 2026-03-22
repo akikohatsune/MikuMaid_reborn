@@ -72,6 +72,9 @@ Edit `.env`:
 - `MAX_REPLY_CHARS`: maximum characters per Discord message chunk (auto-split and continue when exceeded)
 - `TEMPERATURE`: model temperature
 - `MAX_HISTORY`: max short-term conversation turns
+- `KOMIFILTER_ENABLED`: enable prompt-injection and prompt-leak filtering (`true`/`false`)
+- `KOMIFILTER_MAX_CHECK_CHARS`: max characters scanned per message for filter checks
+- `KOMIFILTER_BLOCK_RESPONSE_ON_LEAK`: block model output that looks like leaked internal prompts (`true`/`false`)
 
 ## 3) Run
 
@@ -123,7 +126,16 @@ Bot loads extra rules from `SYSTEM_RULES_MD` and appends them to system prompt.
 - Keep this file as plain Markdown text with only behavioral rules.
 - To stop LaTeX in math replies, add a rule that requires plain-text math notation.
 
-## 7) Storage Isolation by Cog
+## 7) KomiFilter (Anti-Injection / Prompt-Leak)
+
+`komifilter` adds two protections in chat flow:
+- blocks user prompt-injection attempts (for example: "ignore previous instructions")
+- blocks user requests to reveal hidden/system instructions
+- optionally blocks model responses that appear to leak internal prompt content
+
+When blocked, bot replies with a short `komifilter!` notice and does not run the normal LLM reply path.
+
+## 8) Storage Isolation by Cog
 
 Each cog uses a separate SQLite database to reduce blast radius.
 If one DB is corrupted/unavailable, other cogs can keep working.
@@ -132,14 +144,14 @@ If one DB is corrupted/unavailable, other cogs can keep working.
 - Ban DB: `BAN_DB_PATH`
 - Call-names DB: `CALLNAMES_DB_PATH`
 
-## 8) Replay Logger
+## 9) Replay Logger
 
 Chat replay logs are written as JSONL in `logger/`.
 
 - Default file: `logger/chat_replay.jsonl`
 - Config key: `CHAT_REPLAY_LOG_PATH`
 
-## 9) Discord Permissions / Intents
+## 10) Discord Permissions / Intents
 
 In Discord Developer Portal:
 - Enable `MESSAGE CONTENT INTENT`
@@ -149,7 +161,7 @@ Recommended bot permissions:
 - Send Messages
 - Read Message History
 
-## 10) Discord RPC Presence
+## 11) Discord RPC Presence
 
 The bot applies RPC presence on startup (`on_ready`) using:
 - `RPC_ENABLED`

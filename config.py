@@ -41,11 +41,15 @@ class Settings:
     max_reply_chars: int
     temperature: float
     max_history: int
+    komifilter_enabled: bool
+    komifilter_max_check_chars: int
+    komifilter_block_response_on_leak: bool
     dual_mention_hook_enabled: bool
     teto_bot_id: int
     miku_bot_id: int
     teto_fear_message_count: int
     teto_wait_miku_timeout_seconds: int
+    owner_user_id: int | None
 
 
 def _get_env_str(name: str, default: str) -> str:
@@ -184,6 +188,14 @@ def get_settings() -> Settings:
     if rpc_activity_type == "streaming" and not rpc_activity_url:
         raise ValueError("RPC_ACTIVITY_URL is required when RPC_ACTIVITY_TYPE=streaming.")
 
+    teto_wait_miku_timeout_seconds = _get_env_int(
+        "TETO_WAIT_MIKU_TIMEOUT_SECONDS",
+        20,
+        minimum=1,
+    )
+    owner_user_id_raw = os.getenv("OWNER_USER_ID", "").strip()
+    owner_user_id = int(owner_user_id_raw) if owner_user_id_raw.isdigit() else None
+
     return Settings(
         discord_token=discord_token,
         command_prefix=_get_env_str("COMMAND_PREFIX", "!"),
@@ -218,13 +230,20 @@ def get_settings() -> Settings:
         max_reply_chars=_get_env_int("MAX_REPLY_CHARS", 1800, minimum=100),
         temperature=_get_env_float("TEMPERATURE", 0.7),
         max_history=_get_env_int("MAX_HISTORY", 10, minimum=1),
+        komifilter_enabled=_get_env_bool("KOMIFILTER_ENABLED", True),
+        komifilter_max_check_chars=_get_env_int(
+            "KOMIFILTER_MAX_CHECK_CHARS",
+            6000,
+            minimum=256,
+        ),
+        komifilter_block_response_on_leak=_get_env_bool(
+            "KOMIFILTER_BLOCK_RESPONSE_ON_LEAK",
+            True,
+        ),
         dual_mention_hook_enabled=_get_env_bool("DUAL_MENTION_HOOK_ENABLED", True),
         teto_bot_id=_get_env_int("TETO_BOT_ID", 1474702560886652959, minimum=1),
         miku_bot_id=_get_env_int("MIKU_BOT_ID", 1373458132851888128, minimum=1),
         teto_fear_message_count=_get_env_int("TETO_FEAR_MESSAGE_COUNT", 7, minimum=1),
-        teto_wait_miku_timeout_seconds=_get_env_int(
-            "TETO_WAIT_MIKU_TIMEOUT_SECONDS",
-            20,
-            minimum=1,
-        ),
+        teto_wait_miku_timeout_seconds=teto_wait_miku_timeout_seconds,
+        owner_user_id=owner_user_id,
     )

@@ -23,6 +23,7 @@ else:
     HOOKS_IMPORT_ERROR = None
 from config import Settings
 from client import ChatMessage, ImageInput, LLMClient
+from komifilter import KomiFilter
 from logger.chat_logger import ChatReplayLogger
 from memory_store import ShortTermMemoryStore
 
@@ -56,6 +57,11 @@ class AIChatCog(commands.Cog):
             max_history_turns=settings.max_history,
         )
         self.replay_logger = ChatReplayLogger(settings.chat_replay_log_path)
+        self.komifilter = KomiFilter(
+            enabled=settings.komifilter_enabled,
+            max_check_chars=settings.komifilter_max_check_chars,
+            block_response_on_leak=settings.komifilter_block_response_on_leak,
+        )
         self.is_terminated = False
         self.deleted_message_ids: set[int] = set()
         self.deleted_message_order: deque[int] = deque()
@@ -163,6 +169,15 @@ class AIChatCog(commands.Cog):
 
         raw_reply = await self.client.generate(llm_messages)
         reply = self._normalize_model_reply(raw_reply)
+        reply_filter = self.komifilter.inspect_model_reply(reply)
+        if reply_filter.blocked:
+            LOGGER.warning(
+                "komifilter blocked model reply in channel=%s category=%s matches=%s",
+                channel_id,
+                reply_filter.category,
+                ",".join(reply_filter.matches),
+            )
+            reply = self.komifilter.reply_block_message()
 
         await self.chat_memory.append_message(
             channel_id,
@@ -246,6 +261,35 @@ class AIChatCog(commands.Cog):
             return
 
         effective_prompt = self._normalize_prompt(prompt, fallback_prompt)
+        prompt_filter = self.komifilter.inspect_user_prompt(effective_prompt)
+        if prompt_filter.blocked:
+            block_reply = self.komifilter.user_block_message(prompt_filter)
+            LOGGER.warning(
+                "komifilter blocked user prompt user=%s channel=%s trigger=%s "
+                "category=%s matches=%s",
+                user_id,
+                channel_id,
+                trigger,
+                prompt_filter.category,
+                ",".join(prompt_filter.matches),
+            )
+            await self._log_replay_chat(
+                target=target,
+                source_message=source_message,
+                guild_id=guild_id,
+                channel_id=channel_id,
+                user_id=user_id,
+                user_name=user_name,
+                user_display=user_display,
+                trigger=f"{trigger}:komifilter_block",
+                prompt=effective_prompt,
+                reply_length=len(block_reply),
+            )
+            if source_message_id is not None and source_message_id in self.deleted_message_ids:
+                return
+            await self._send_long_message(target, block_reply)
+            return
+
         async with self._typing_context(target):
             try:
                 images = await self._extract_images_from_message(source_message)
@@ -264,6 +308,34 @@ class AIChatCog(commands.Cog):
         if source_message_id is not None and source_message_id in self.deleted_message_ids:
             return
 
+        await self._log_replay_chat(
+            target=target,
+            source_message=source_message,
+            guild_id=guild_id,
+            channel_id=channel_id,
+            user_id=user_id,
+            user_name=user_name,
+            user_display=user_display,
+            trigger=trigger,
+            prompt=effective_prompt,
+            reply_length=len(reply),
+        )
+        await self._send_long_message(target, reply)
+
+    async def _log_replay_chat(
+        self,
+        *,
+        target: commands.Context[commands.Bot] | discord.Message,
+        source_message: discord.Message | None,
+        guild_id: int | None,
+        channel_id: int,
+        user_id: int | None,
+        user_name: str,
+        user_display: str,
+        trigger: str,
+        prompt: str,
+        reply_length: int,
+    ) -> None:
         guild_name, channel_name = self._resolve_scope_names(target, source_message)
         await self.replay_logger.log_chat(
             guild_id=guild_id,
@@ -274,10 +346,9 @@ class AIChatCog(commands.Cog):
             user_name=user_name,
             user_display=user_display,
             trigger=trigger,
-            prompt=effective_prompt,
-            reply_length=len(reply),
+            prompt=prompt,
+            reply_length=reply_length,
         )
-        await self._send_long_message(target, reply)
 
     def _track_deleted_message(self, message_id: int) -> None:
         if message_id in self.deleted_message_ids:
@@ -522,6 +593,9 @@ class AIChatCog(commands.Cog):
             f"Idle TTL: `{self.settings.memory_idle_ttl_seconds}s` | "
             f"Image limit: `{self.settings.image_max_bytes}` bytes | "
             f"Reply chunk size: `{self.settings.max_reply_chars}` chars | "
+            f"KomiFilter: `{self.settings.komifilter_enabled}` | "
+            f"KomiFilter max check: `{self.settings.komifilter_max_check_chars}` | "
+            f"KomiFilter leak block: `{self.settings.komifilter_block_response_on_leak}` | "
             f"Terminated: `{self.is_terminated}`"
         )
 

@@ -756,8 +756,10 @@ class AIChatCog(commands.Cog):
                     await target.channel.send(chunk)
 
     def _sanitize_bot_output(self, text: str) -> str:
+        text = text.replace("\r\n", "\n").replace("\n", " ")
         text = self.EVERYONE_MENTION_PATTERN.sub("@\u200beveryone", text)
         text = self.HERE_MENTION_PATTERN.sub("@\u200bhere", text)
+        text = re.sub(r" {2,}", " ", text)
         return text
 
     def _normalize_model_reply(self, text: str) -> str:

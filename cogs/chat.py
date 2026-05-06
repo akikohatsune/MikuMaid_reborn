@@ -716,59 +716,22 @@ class AIChatCog(commands.Cog):
         return command_name in self.SUPPORTED_PREFIX_COMMANDS
 
     def _split_message_smartly(self, text: str, max_len: int) -> list[str]:
-        """Split message intelligently, handling both sentence and word boundaries."""
+        """Split message into fixed-size chunks only when exceeding max_len."""
         if len(text) <= max_len:
             return [text]
-        
+
         chunks: list[str] = []
         remaining = text
-        
+
         while remaining:
             if len(remaining) <= max_len:
                 chunks.append(remaining)
                 break
-            
-            # Try to find a good break point within max_len
-            cut_pos = max_len
-            
-            # Priority 1: Look for newline (paragraph break)
-            newline_pos = remaining.rfind("\n", 0, max_len)
-            if newline_pos > max_len * 0.7:
-                cut_pos = newline_pos + 1
-            else:
-                # Priority 2: Look for sentence-ending punctuation
-                found_sentence_end = False
-                for end_char in ["。", "！", "？", ".", "!", "?"]:  # Include both English and Asian punctuation
-                    end_pos = remaining.rfind(end_char, 0, max_len)
-                    if end_pos > max_len * 0.6:  # At least 60% of max_len
-                        cut_pos = end_pos + 1
-                        found_sentence_end = True
-                        break
-                
-                if not found_sentence_end:
-                    # Priority 3: Look for comma or other soft breaks
-                    found_soft_break = False
-                    for soft_char in ["，", "、", ",", ";"]:  # Include both English and Asian punctuation
-                        soft_pos = remaining.rfind(soft_char, 0, max_len)
-                        if soft_pos > max_len * 0.6:
-                            cut_pos = soft_pos + 1
-                            found_soft_break = True
-                            break
-                    
-                    if not found_soft_break:
-                        # Priority 4: Look for space (word boundary) only if it's late enough
-                        space_pos = remaining.rfind(" ", 0, max_len)
-                        if space_pos > max_len * 0.6:
-                            cut_pos = space_pos + 1
-                        else:
-                            # Fallback: cut at max_len and let Discord handle it
-                            cut_pos = max_len
-            
-            chunk = remaining[:cut_pos].rstrip()
-            if chunk:
-                chunks.append(chunk)
-            remaining = remaining[cut_pos:].lstrip()
-        
+
+            chunk = remaining[:max_len]
+            chunks.append(chunk)
+            remaining = remaining[max_len:]
+
         return chunks
 
     async def _send_long_message(
@@ -777,7 +740,7 @@ class AIChatCog(commands.Cog):
         text: str,
     ) -> None:
         text = self._sanitize_bot_output(text)
-        max_len = min(1900, self.settings.max_reply_chars)
+        max_len = 1900
         chunks = self._split_message_smartly(text, max_len) or ["(no content)"]
 
         for idx, chunk in enumerate(chunks):

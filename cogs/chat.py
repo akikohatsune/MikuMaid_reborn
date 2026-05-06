@@ -747,15 +747,18 @@ class AIChatCog(commands.Cog):
                 
                 if not found_sentence_end:
                     # Priority 3: Look for comma or other soft breaks
+                    found_soft_break = False
                     for soft_char in ["，", "、", ",", ";"]:  # Include both English and Asian punctuation
                         soft_pos = remaining.rfind(soft_char, 0, max_len)
                         if soft_pos > max_len * 0.6:
                             cut_pos = soft_pos + 1
+                            found_soft_break = True
                             break
-                    else:
-                        # Priority 4: Look for space (word boundary)
+                    
+                    if not found_soft_break:
+                        # Priority 4: Look for space (word boundary) only if it's late enough
                         space_pos = remaining.rfind(" ", 0, max_len)
-                        if space_pos > 0:
+                        if space_pos > max_len * 0.6:
                             cut_pos = space_pos + 1
                         else:
                             # Fallback: cut at max_len and let Discord handle it
@@ -774,7 +777,7 @@ class AIChatCog(commands.Cog):
         text: str,
     ) -> None:
         text = self._sanitize_bot_output(text)
-        max_len = min(2000, self.settings.max_reply_chars)
+        max_len = min(1900, self.settings.max_reply_chars)
         chunks = self._split_message_smartly(text, max_len) or ["(no content)"]
 
         for idx, chunk in enumerate(chunks):

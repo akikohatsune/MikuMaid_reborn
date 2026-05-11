@@ -1,7 +1,7 @@
-from __future__ import annotations
-
 import re
+import unicodedata
 from dataclasses import dataclass
+from typing import Any
 
 
 @dataclass(slots=True, frozen=True)
@@ -13,88 +13,102 @@ class KomiFilterDecision:
 
 
 class KomiFilter:
+    # --- Advanced Prompt Injection Patterns ---
     USER_INJECTION_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
         (
             "ignore_previous_instructions",
             re.compile(
-                r"\b(?:ignore|disregard|forget|override|bypass)\b.{0,80}\b"
-                r"(?:previous|prior|above|earlier|all)\b.{0,80}\b"
-                r"(?:instructions?|rules?|system prompt|guardrails?)\b",
+                r"(?:\b|[\W_])(?:ignore|disregard|forget|override|bypass|negate|overwrite|cancel|stop)\b"
+                r".{0,100}\b(?:previous|prior|above|earlier|all|original|system|baseline)\b"
+                r".{0,100}\b(?:instructions?|rules?|system prompt|guardrails?|guidelines?|constraints?)\b",
                 flags=re.IGNORECASE | re.DOTALL,
             ),
         ),
         (
             "act_as_system_or_developer",
             re.compile(
-                r"\b(?:act|behave|pretend)\b.{0,40}\b(?:as|like)\b.{0,40}\b"
-                r"(?:system|developer|admin(?:istrator)?|root)\b",
+                r"(?:\b|[\W_])(?:act|behave|pretend|mimic|roleplay|simulate)\b"
+                r".{0,60}\b(?:as|like|the role of)\b"
+                r".{0,60}\b(?:system|developer|admin(?:istrator)?|root|god|kernel|super-user|technical support)\b",
                 flags=re.IGNORECASE | re.DOTALL,
             ),
         ),
         (
             "disable_safety",
             re.compile(
-                r"\b(?:disable|turn off|remove|skip)\b.{0,40}\b"
-                r"(?:safety|policy|guardrails?|filters?)\b",
+                r"(?:\b|[\W_])(?:disable|turn off|remove|skip|bypass|disable|suspend|deactivate)\b"
+                r".{0,60}\b(?:safety|policy|guardrails?|filters?|censorship|moderation|protections?)\b",
                 flags=re.IGNORECASE | re.DOTALL,
             ),
         ),
         (
             "role_spoofing_header",
             re.compile(
-                r"^\s*(?:system|developer)\s*:",
+                r"^\s*(?:system|developer|assistant|user|admin)\s*:",
                 flags=re.IGNORECASE | re.MULTILINE,
             ),
         ),
         (
             "jailbreak_mode",
             re.compile(
-                r"\b(?:jailbreak|dan mode|developer mode|aim mode|unfiltered mode)\b",
+                r"\b(?:jailbreak|dan mode|developer mode|aim mode|unfiltered mode|do anything now|broken constraints?|unshackled|free mode)\b",
                 flags=re.IGNORECASE,
             ),
         ),
         (
             "new_conversation_spoof",
             re.compile(
-                r"\b(?:end of conversation|new conversation|start fresh)\b",
+                r"(?:\b|[\W_])(?:end of conversation|new conversation|start fresh|reboot|initialize|reset session)\b",
                 flags=re.IGNORECASE,
             ),
         ),
         (
             "output_formatting_override",
             re.compile(
-                r"\b(?:output|respond|reply)\b.{0,40}\b(?:only|exactly|using)\b.{0,40}\b"
-                r"(?:json|code|raw|markdown|hex|base64)\b",
+                r"(?:\b|[\W_])(?:output|respond|reply|format|print)\b"
+                r".{0,60}\b(?:only|exactly|using|in|as)\b"
+                r".{0,60}\b(?:json|code|raw|markdown|hex|base64|binary|python|terminal|shell)\b",
                 flags=re.IGNORECASE | re.DOTALL,
             ),
         ),
+        (
+            "obfuscation_payload",
+            re.compile(
+                r"(?:(?:\\x[0-9a-f]{2}){4,}|(?:\\u[0-9a-f]{4}){3,}|(?:&#x?[0-9a-f]+;){4,})",
+                flags=re.IGNORECASE,
+            ),
+        ),
     )
+
+    # --- Prompt Leak Prevention Patterns ---
     USER_PROMPT_LEAK_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
         (
             "request_system_prompt",
             re.compile(
-                r"\b(?:show|reveal|print|dump|display|repeat|quote|return|expose|tell me)\b"
-                r".{0,100}\b(?:system|developer|hidden|internal|original|initial)\b.{0,100}\b"
-                r"(?:prompt|instructions?|message|rules?|personality)\b",
+                r"(?:\b|[\W_])(?:show|reveal|print|dump|display|repeat|quote|return|expose|tell me|extract|what is)\b"
+                r".{0,120}\b(?:system|developer|hidden|internal|original|initial|base|underlying)\b"
+                r".{0,120}\b(?:prompt|instructions?|message|rules?|personality|identity|logic)\b",
                 flags=re.IGNORECASE | re.DOTALL,
             ),
         ),
         (
             "request_markdown_source",
             re.compile(
-                r"\b(?:show|reveal|print|dump|display|repeat|quote|return|expose)\b"
-                r".{0,80}\b(?:markdown|source|file)\b",
+                r"(?:\b|[\W_])(?:show|reveal|print|dump|display|repeat|quote|return|expose)\b"
+                r".{0,100}\b(?:markdown|source|file|text|raw content)\b",
                 flags=re.IGNORECASE | re.DOTALL,
             ),
         ),
         (
             "rules_file_probe",
             re.compile(
-                r"\b(?:system_rules\.md|rules source|rules markdown|system rules)\b",
+                r"\b(?:system_rules\.md|rules source|rules markdown|system rules|gemini\.md)\b",
                 flags=re.IGNORECASE,
             ),
         ),
     )
+
+    # --- Strong Model Leak Markers (Filtered from Model Response) ---
     REPLY_STRONG_LEAK_MARKERS: tuple[str, ...] = (
         "you must follow these extra system rules loaded from markdown",
         "rules source:",
@@ -105,19 +119,22 @@ class KomiFilter:
         "[attached_images=",
         "user calls miku:",
         "miku calls user:",
+        "you are miku, a playful ai assistant on discord",
+        "default to english unless the user explicitly asks",
     )
+
     REPLY_LEAK_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
         (
             "system_prompt_dump",
             re.compile(
-                r"^\s*(?:system|developer)\s*(?:prompt|instructions?)\s*:",
+                r"^\s*(?:system|developer|assistant)\s*(?:prompt|instructions?)\s*:",
                 flags=re.IGNORECASE | re.MULTILINE,
             ),
         ),
         (
             "internal_prompt_phrase",
             re.compile(
-                r"\b(?:internal|hidden|developer)\s+(?:prompt|instructions?)\b",
+                r"(?:\b|[\W_])(?:internal|hidden|developer|baseline)\s+(?:prompt|instructions?|logic|rules?)\b",
                 flags=re.IGNORECASE,
             ),
         ),
@@ -137,25 +154,28 @@ class KomiFilter:
     def inspect_user_prompt(self, text: str) -> KomiFilterDecision:
         if not self.enabled:
             return KomiFilterDecision(blocked=False)
+        
         sample = self._prepare_text(text)
         if not sample:
             return KomiFilterDecision(blocked=False)
 
+        # 1. Check for prompt injection
         injection_hits = self._collect_matches(sample, self.USER_INJECTION_PATTERNS)
         if injection_hits:
             return KomiFilterDecision(
                 blocked=True,
                 category="prompt_injection",
-                reason="instruction override attempt",
+                reason="suspicious instruction override attempt",
                 matches=injection_hits,
             )
 
+        # 2. Check for prompt leak requests
         leak_hits = self._collect_matches(sample, self.USER_PROMPT_LEAK_PATTERNS)
         if leak_hits:
             return KomiFilterDecision(
                 blocked=True,
                 category="prompt_leak_request",
-                reason="prompt leak request",
+                reason="suspicious system prompt discovery attempt",
                 matches=leak_hits,
             )
 
@@ -164,11 +184,14 @@ class KomiFilter:
     def inspect_model_reply(self, text: str) -> KomiFilterDecision:
         if not self.enabled or not self.block_response_on_leak:
             return KomiFilterDecision(blocked=False)
+        
         sample = self._prepare_text(text)
         if not sample:
             return KomiFilterDecision(blocked=False)
 
         lowered = sample.lower()
+        
+        # 1. Search for literal markers of the system prompt or internal state
         strong_hits = tuple(
             marker for marker in self.REPLY_STRONG_LEAK_MARKERS if marker in lowered
         )
@@ -180,6 +203,7 @@ class KomiFilter:
                 matches=strong_hits,
             )
 
+        # 2. Check with patterns for structural leaks
         weak_hits = self._collect_matches(sample, self.REPLY_LEAK_PATTERNS)
         if weak_hits:
             return KomiFilterDecision(
@@ -194,24 +218,34 @@ class KomiFilter:
     def user_block_message(self, decision: KomiFilterDecision) -> str:
         if decision.category == "prompt_injection":
             return (
-                "komifilter! blocked instruction-override attempt. "
-                "Ask your actual task directly without trying to change system rules."
+                "komifilter! phát hiện nỗ lực thay đổi quy tắc hệ thống. "
+                "vui lòng đặt câu hỏi trực tiếp mà không cố gắng bỏ qua các ràng buộc."
             )
         return (
-            "komifilter! blocked prompt-leak request. "
-            "I cannot reveal internal or system instructions."
+            "komifilter! phát hiện yêu cầu rò rỉ thông tin nội bộ. "
+            "tôi không được phép tiết lộ quy tắc hoặc hướng dẫn hệ thống."
         )
 
     def reply_block_message(self) -> str:
         return (
-            "komifilter! internal prompt-like output was filtered. "
-            "Please retry with a direct task request."
+            "komifilter! nội dung phản hồi bị chặn vì chứa thông tin nhạy cảm của hệ thống. "
+            "vui lòng thử lại với một yêu cầu khác."
         )
 
     def _prepare_text(self, text: str) -> str:
         if not text:
             return ""
-        return text[: self.max_check_chars].strip()
+        
+        # Truncate to avoid DoS on heavy regex
+        truncated = text[: self.max_check_chars]
+        
+        # Unicode normalization (NFC) to handle character-based bypasses (e.g. e + accent)
+        normalized = unicodedata.normalize("NFC", truncated)
+        
+        # Remove common obfuscation characters like zero-width spaces, etc.
+        cleaned = re.sub(r"[\u200b-\u200d\ufeff\u00ad]", "", normalized)
+        
+        return cleaned.strip()
 
     def _collect_matches(
         self,

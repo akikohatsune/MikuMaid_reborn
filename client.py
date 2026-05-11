@@ -5,9 +5,6 @@ import binascii
 import inspect
 from typing import Any, Awaitable, Callable, TypedDict, cast
 
-from google import genai
-from google.genai import types as genai_types
-from groq import AsyncGroq
 try:
     from openai import AsyncOpenAI
 except ImportError:  # pragma: no cover - optional dependency at runtime
@@ -30,202 +27,29 @@ class ChatMessage(TypedDict, total=False):
 class LLMClient:
     def __init__(self, settings: Settings):
         self.settings = settings
-        self.gemini_client = (
-            genai.Client(api_key=settings.gemini_api_key)
-            if settings.gemini_api_key
-            else None
-        )
-        approval_key = settings.approval_gemini_api_key
-        if approval_key and approval_key == settings.gemini_api_key and self.gemini_client:
-            self.approval_gemini_client = self.gemini_client
-        else:
-            self.approval_gemini_client = (
-                genai.Client(api_key=approval_key) if approval_key else None
+        self.nvidia_client = (
+            AsyncOpenAI(
+                api_key=settings.nvidia_api_key,
+                base_url="https://integrate.api.nvidia.com/v1"
             )
-        self.groq_client = (
-            AsyncGroq(api_key=settings.groq_api_key) if settings.groq_api_key else None
-        )
-        self.openai_client = (
-            AsyncOpenAI(api_key=settings.openai_api_key)
-            if settings.openai_api_key and AsyncOpenAI is not None
+            if settings.nvidia_api_key and AsyncOpenAI is not None
             else None
         )
 
     async def aclose(self) -> None:
-        if self.groq_client and hasattr(self.groq_client, "close"):
-            await self.groq_client.close()
-        if self.openai_client and hasattr(self.openai_client, "close"):
-            maybe_awaitable = self.openai_client.close()
+        if self.nvidia_client and hasattr(self.nvidia_client, "close"):
+            maybe_awaitable = self.nvidia_client.close()
             if inspect.isawaitable(maybe_awaitable):
                 await maybe_awaitable
 
     async def generate(self, messages: list[ChatMessage]) -> str:
-        handlers: dict[str, Callable[[list[ChatMessage]], Awaitable[str]]] = {
-            "gemini": self._call_gemini,
-            "groq": self._call_groq,
-            "openai": self._call_openai,
-        }
-        provider = self.settings.provider
-        has_images = any(msg.get("images") for msg in messages)
-
-        # [Two-Step Vision Logic]
-        # Only use this if explicitly enabled AND provider is NOT Gemini
-        if (
-            has_images 
-            and self.settings.use_two_step_vision 
-            and provider != "gemini" 
-            and self.gemini_client
-        ):
-            try:
-                print(f"[vision] Two-Step Vision enabled: Self-model (Gemini) is performing OCR/analysis...")
-                # Get a description of the images from Gemini
-                visual_context = await self._describe_images_with_gemini(messages)
-                
-                # Transform messages: remove raw images and append the visual description to the last user message
-                messages = self._inject_visual_context_into_messages(messages, visual_context)
-                print(f"[vision] Visual context injected. Sending text task to {provider}.")
-                
-                # Now we proceed as a text-only task
-                has_images = False 
-            except Exception as exc:
-                print(f"[vision] OCR/Self-model analysis failed, attempting direct vision: {exc}")
-                # Fallback to direct vision if OCR step fails
-
-        # Regular path (now text-only if OCR was successful)
-        handler = handlers.get(provider)
-        if handler is None:
-            raise RuntimeError(f"Unsupported provider: {provider}")
-
-        try:
-            return await handler(messages)
-        except Exception as exc:
-            # Final fallback to direct Gemini vision if anything failed
-            if (
-                has_images 
-                and provider != "gemini" 
-                and self.settings.vision_fallback_enabled 
-                and self.gemini_client
-            ):
-                print(f"[vision-fallback] {provider} failed, retrying with direct gemini: {exc}")
-                try:
-                    return await self._call_gemini(messages)
-                except Exception as gexc:
-                    raise RuntimeError(f"Both {provider} and Gemini fallback failed. Gemini error: {gexc}") from exc
-            
-            raise
-
-    async def _describe_images_with_gemini(self, messages: list[ChatMessage]) -> str:
-        """Internal helper to get a high-quality description/OCR from the self-model."""
-        # We only send the messages that contain images to Gemini for description
-        # but usually the latest message is enough. For simplicity, we send the whole history.
-        response = await self.gemini_client.aio.models.generate_content(
-            model=self.settings.gemini_model,
-            contents=self._build_gemini_contents(messages),
-            config=genai_types.GenerateContentConfig(
-                temperature=0.2, # Lower temperature for accurate OCR
-                system_instruction=(
-                    "You are a visual analysis model. "
-                    "Analyze the attached images and provide a comprehensive, accurate description for another AI to process. "
-                    "Describe:\n"
-                    "- Who/what is in the image\n"
-                    "- Style (anime, real, game, etc.)\n"
-                    "- Context (scene, event, emotion)\n"
-                    "- Any recognizable characters, logos, or references\n"
-                    "- Any visible text (OCR), colors, objects, and layout details.\n"
-                    "Be detailed, specific, and objective. Do not engage in conversation, just describe."
-                ),
-            ),
-        )
-        return self._extract_gemini_text(response, context="Gemini OCR")
-
-    def _inject_visual_context_into_messages(
-        self, 
-        messages: list[ChatMessage], 
-        visual_context: str
-    ) -> list[ChatMessage]:
-        """Removes images and injects text description into the message list."""
-        new_messages: list[ChatMessage] = []
-        for i, msg in enumerate(messages):
-            # Clone message without images
-            new_msg: ChatMessage = {"role": msg["role"], "content": msg.get("content", "")}
-            
-            # If it's the last user message, append the visual context
-            if i == len(messages) - 1 and msg["role"] == "user":
-                prompt = new_msg["content"]
-                new_msg["content"] = (
-                    f"{prompt}\n\n"
-                    f"[VISUAL_CONTEXT_FROM_SELF_MODEL]\n"
-                    f"{visual_context}\n"
-                    f"[/VISUAL_CONTEXT]"
-                )
-            new_messages.append(new_msg)
-        return new_messages
-
-    async def approve_call_name(self, field_name: str, value: str) -> bool:
-        raw = await self._approve_call_name_gemini(field_name, value)
-        verdict = self._normalize_yes_no(raw)
-        return verdict == "yes"
-
-    async def _approve_call_name_gemini(self, field_name: str, value: str) -> str:
-        if self.approval_gemini_client is None:
-            raise RuntimeError(
-                "Missing APPROVAL_GEMINI_API_KEY (or GEMINI_API_KEY fallback)"
-            )
-
-        response = await self.approval_gemini_client.aio.models.generate_content(
-            model=self.settings.gemini_approval_model,
-            contents=[
-                genai_types.Content(
-                    role="user",
-                    parts=[
-                        genai_types.Part.from_text(
-                            text=f"Call-name field: {field_name}\nContent: {value}"
-                        )
-                    ],
-                )
-            ],
-            config=genai_types.GenerateContentConfig(
-                temperature=0,
-                system_instruction=self._approval_system_instruction(),
-            ),
-        )
-        return self._extract_gemini_text(response, context="Gemini approval")
-
-    async def _call_gemini(self, messages: list[ChatMessage]) -> str:
-        if self.gemini_client is None:
-            raise RuntimeError("Missing GEMINI_API_KEY")
-        response = await self.gemini_client.aio.models.generate_content(
-            model=self.settings.gemini_model,
-            contents=self._build_gemini_contents(messages),
-            config=genai_types.GenerateContentConfig(
-                temperature=self.settings.temperature,
-                system_instruction=self.settings.system_prompt,
-            ),
-        )
-        return self._extract_gemini_text(response, context="Gemini")
-
-    async def _call_groq(self, messages: list[ChatMessage]) -> str:
-        if self.groq_client is None:
-            raise RuntimeError("Missing GROQ_API_KEY")
-
-        chat_completion = await self.groq_client.chat.completions.create(
-            model=self.settings.groq_model,
-            messages=self._build_openai_style_messages(messages),
-            temperature=self.settings.temperature,
-        )
-        message = chat_completion.choices[0].message
-        content = message.content
-        if isinstance(content, str) and content.strip():
-            return content.strip()
-        raise RuntimeError("Groq returned an empty response.")
-
-    async def _call_openai(self, messages: list[ChatMessage]) -> str:
         if AsyncOpenAI is None:
             raise RuntimeError("OpenAI SDK not installed. Run: pip install -r requirements.txt")
-        if self.openai_client is None:
-            raise RuntimeError("Missing OPENAI_API_KEY")
-        chat_completion = await self.openai_client.chat.completions.create(
-            model=self.settings.openai_model,
+        if self.nvidia_client is None:
+            raise RuntimeError("Missing NVIDIA_API_KEY")
+
+        chat_completion = await self.nvidia_client.chat.completions.create(
+            model=self.settings.nvidia_model,
             messages=self._build_openai_style_messages(messages),
             temperature=self.settings.temperature,
         )
@@ -233,19 +57,11 @@ class LLMClient:
         content = message.content
         if isinstance(content, str) and content.strip():
             return content.strip()
-        raise RuntimeError("OpenAI returned an empty response.")
+        raise RuntimeError("NVIDIA returned an empty response.")
 
-    def _build_gemini_contents(
-        self,
-        messages: list[ChatMessage],
-    ) -> list[genai_types.Content]:
-        contents: list[genai_types.Content] = []
-        for msg in messages:
-            role = "model" if msg["role"] == "assistant" else "user"
-            parts = self._build_gemini_parts(msg)
-            if parts:
-                contents.append(genai_types.Content(role=role, parts=parts))
-        return contents
+    async def approve_call_name(self, field_name: str, value: str) -> bool:
+        """Simplified approval: always approve since Gemini moderator is removed."""
+        return True
 
     def _build_openai_style_messages(
         self,
@@ -274,68 +90,3 @@ class LLMClient:
             elif text:
                 openai_messages.append({"role": msg["role"], "content": text})
         return openai_messages
-
-    def _build_gemini_parts(self, msg: ChatMessage) -> list[genai_types.Part]:
-        parts: list[genai_types.Part] = []
-        text = msg.get("content", "").strip()
-        if text:
-            parts.append(genai_types.Part.from_text(text=text))
-
-        for image in msg.get("images", []):
-            parts.append(self._image_part_from_b64(image))
-        return parts
-
-    def _image_part_from_b64(
-        self,
-        image: ImageInput,
-    ) -> genai_types.Part:
-        try:
-            raw_bytes = base64.b64decode(image["data_b64"], validate=True)
-        except (binascii.Error, ValueError) as exc:
-            raise RuntimeError("Invalid image base64 input.") from exc
-        return genai_types.Part.from_bytes(
-            data=raw_bytes,
-            mime_type=image["mime_type"],
-        )
-
-    def _extract_gemini_text(
-        self,
-        response: Any,
-        *,
-        context: str,
-    ) -> str:
-        direct_text = cast(str | None, getattr(response, "text", None))
-        if direct_text and direct_text.strip():
-            return direct_text.strip()
-
-        candidates = cast(list[Any], getattr(response, "candidates", []) or [])
-        for candidate in candidates:
-            content = getattr(candidate, "content", None)
-            if content is None:
-                continue
-            parts = cast(list[Any], getattr(content, "parts", []) or [])
-            text_parts = [
-                str(part.text).strip()
-                for part in parts
-                if getattr(part, "text", None)
-                and str(part.text).strip()
-            ]
-            if text_parts:
-                return "\n".join(text_parts)
-        raise RuntimeError(f"{context} returned an empty response.")
-
-    def _normalize_yes_no(self, value: str) -> str | None:
-        cleaned = value.strip().lower().strip("`'\".!?[](){} ")
-        if cleaned in {"yes", "y"}:
-            return "yes"
-        if cleaned in {"no", "n"}:
-            return "no"
-        return None
-
-    def _approval_system_instruction(self) -> str:
-        return (
-            "You are a moderator for Discord call-names. "
-            "Reply with exactly one word: 'yes' or 'no'. "
-            "Reply 'no' if the content is insulting, harassing, hateful, sexual, "
-            "discriminatory, or generally not appropriate for respectful addressing."
-        )

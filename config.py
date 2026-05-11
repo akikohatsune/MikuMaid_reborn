@@ -21,18 +21,8 @@ class Settings:
     rpc_activity_type: str
     rpc_activity_name: str
     rpc_activity_url: str | None
-    provider: str
-    gemini_api_key: str | None
-    approval_gemini_api_key: str | None
-    gemini_model: str
-    gemini_approval_model: str
-    groq_api_key: str | None
-    groq_model: str
-    openai_api_key: str | None
-    openai_model: str
-    local_api_key: str | None
-    local_model: str
-    local_api_base: str
+    nvidia_api_key: str
+    nvidia_model: str
     system_prompt: str
     system_rules_md: str
     chat_replay_log_path: str
@@ -47,18 +37,13 @@ class Settings:
     komifilter_enabled: bool
     komifilter_max_check_chars: int
     komifilter_block_response_on_leak: bool
-    dual_mention_hook_enabled: bool
-    teto_bot_id: int
-    miku_bot_id: int
-    teto_fear_message_count: int
-    teto_wait_miku_timeout_seconds: int
     owner_id: int | None
-    vision_fallback_enabled: bool
-    use_two_step_vision: bool
     restart_interval_hours: int
 
 
 def _get_env_str(name: str, default: str) -> str:
+# ... (helper functions same as before)
+# ... (rest of helper functions unchanged)
     value = os.getenv(name, default)
     if value is None:
         return default
@@ -117,11 +102,9 @@ def _load_system_rules_prompt(path_value: str) -> str:
 
 
 def get_settings() -> Settings:
-    provider = _get_env_str("LLM_PROVIDER", "gemini").lower()
-    if provider == "chatgpt":
-        provider = "openai"
-    if provider not in {"gemini", "groq", "openai", "local"}:
-        raise ValueError("LLM_PROVIDER must be one of: gemini, groq, openai, chatgpt, local.")
+    nvidia_api_key = _get_env_str("NVIDIA_API_KEY", "")
+    if not nvidia_api_key:
+        raise ValueError("Missing NVIDIA_API_KEY in environment variables.")
 
     discord_token = _get_env_str("DISCORD_TOKEN", "")
     if not discord_token:
@@ -137,44 +120,8 @@ def get_settings() -> Settings:
         f"{base_system_prompt}\n\n{rules_prompt}" if rules_prompt else base_system_prompt
     )
     legacy_memory_db_path = _get_env_str("MEMORY_DB_PATH", "chat_memory.db")
-    gemini_model = _get_env_str("GEMINI_MODEL", DEFAULT_GEMINI_MODEL)
-    gemini_approval_model = _get_env_str(
-        "GEMINI_APPROVAL_MODEL",
-        DEFAULT_GEMINI_APPROVAL_MODEL,
-    )
-    groq_model = _get_env_str("GROQ_MODEL", "llama-3.3-70b-versatile")
-    openai_model = _get_env_str("OPENAI_MODEL", DEFAULT_OPENAI_MODEL)
+    nvidia_model = _get_env_str("NVIDIA_MODEL", "google/gemma-3n-e4b-it")
     
-    local_model = _get_env_str("LOCAL_MODEL", "llava") # Default common vision model
-    local_api_base = _get_env_str("LOCAL_API_BASE", "http://localhost:11434/v1")
-    local_api_key = _get_env_str("LOCAL_API_KEY", "not-needed")
-
-    gemini_api_key = _get_env_str("GEMINI_API_KEY", "") or None
-    groq_api_key = _get_env_str("GROQ_API_KEY", "") or None
-    openai_api_key = _get_env_str("OPENAI_API_KEY", "") or None
-    approval_gemini_api_key = (
-        _get_env_str("APPROVAL_GEMINI_API_KEY", "") or gemini_api_key
-    )
-
-    if not gemini_approval_model:
-        raise ValueError("GEMINI_APPROVAL_MODEL cannot be empty.")
-    if provider == "gemini" and not gemini_api_key:
-        raise ValueError("Missing GEMINI_API_KEY for LLM_PROVIDER=gemini.")
-    if provider == "groq" and not groq_api_key:
-        raise ValueError("Missing GROQ_API_KEY for LLM_PROVIDER=groq.")
-    if provider == "openai" and not openai_api_key:
-        raise ValueError(
-            "Missing OPENAI_API_KEY for LLM_PROVIDER=openai (or chatgpt)."
-        )
-    if provider == "local" and not local_api_base:
-        raise ValueError("Missing LOCAL_API_BASE for LLM_PROVIDER=local.")
-    
-    if not approval_gemini_api_key:
-        raise ValueError(
-            "Missing approval Gemini API key. Set APPROVAL_GEMINI_API_KEY "
-            "or GEMINI_API_KEY."
-        )
-
     rpc_enabled = _get_env_bool("RPC_ENABLED", True)
     rpc_status = _get_env_str("RPC_STATUS", "online").lower()
     rpc_activity_type = _get_env_str("RPC_ACTIVITY_TYPE", "playing").lower()
@@ -202,11 +149,6 @@ def get_settings() -> Settings:
     if rpc_activity_type == "streaming" and not rpc_activity_url:
         raise ValueError("RPC_ACTIVITY_URL is required when RPC_ACTIVITY_TYPE=streaming.")
 
-    teto_wait_miku_timeout_seconds = _get_env_int(
-        "TETO_WAIT_MIKU_TIMEOUT_SECONDS",
-        20,
-        minimum=1,
-    )
     owner_id_raw = os.getenv("OWNER_USER_ID", "").strip()
     owner_id = int(owner_id_raw) if owner_id_raw.isdigit() else None
     restart_interval_hours = _get_env_int("RESTART_INTERVAL_HOURS", 12, minimum=0)
@@ -219,18 +161,8 @@ def get_settings() -> Settings:
         rpc_activity_type=rpc_activity_type,
         rpc_activity_name=rpc_activity_name,
         rpc_activity_url=rpc_activity_url,
-        provider=provider,
-        gemini_api_key=gemini_api_key,
-        approval_gemini_api_key=approval_gemini_api_key,
-        gemini_model=gemini_model,
-        gemini_approval_model=gemini_approval_model,
-        groq_api_key=groq_api_key,
-        groq_model=groq_model,
-        openai_api_key=openai_api_key,
-        openai_model=openai_model,
-        local_api_key=local_api_key,
-        local_model=local_model,
-        local_api_base=local_api_base,
+        nvidia_api_key=nvidia_api_key,
+        nvidia_model=nvidia_model,
         system_prompt=full_system_prompt,
         system_rules_md=system_rules_md,
         chat_replay_log_path=_get_env_str(
@@ -258,13 +190,6 @@ def get_settings() -> Settings:
             "KOMIFILTER_BLOCK_RESPONSE_ON_LEAK",
             True,
         ),
-        dual_mention_hook_enabled=_get_env_bool("DUAL_MENTION_HOOK_ENABLED", True),
-        teto_bot_id=_get_env_int("TETO_BOT_ID", 1474702560886652959, minimum=1),
-        miku_bot_id=_get_env_int("MIKU_BOT_ID", 1373458132851888128, minimum=1),
-        teto_fear_message_count=_get_env_int("TETO_FEAR_MESSAGE_COUNT", 7, minimum=1),
-        teto_wait_miku_timeout_seconds=teto_wait_miku_timeout_seconds,
         owner_id=owner_id,
-        vision_fallback_enabled=_get_env_bool("VISION_FALLBACK_ENABLED", True),
-        use_two_step_vision=_get_env_bool("USE_TWO_STEP_VISION", False),
         restart_interval_hours=restart_interval_hours,
     )

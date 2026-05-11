@@ -10,17 +10,6 @@ from typing import cast
 import discord
 from discord.ext import commands, tasks
 
-try:
-    from cogs.chat_hooks.miku_fear_line_generator import (
-        MikuFearLineGenerator,
-        TetoMikuDualMentionHook,
-    )
-except Exception as exc:  # pragma: no cover - optional local module
-    TetoMikuDualMentionHook = None  # type: ignore[assignment]
-    MikuFearLineGenerator = None  # type: ignore[assignment]
-    HOOKS_IMPORT_ERROR: Exception | None = exc
-else:
-    HOOKS_IMPORT_ERROR = None
 from config import Settings
 from client import ChatMessage, ImageInput, LLMClient
 from komifilter import KomiFilter
@@ -65,26 +54,7 @@ class AIChatCog(commands.Cog):
         self.is_terminated = False
         self.deleted_message_ids: set[int] = set()
         self.deleted_message_order: deque[int] = deque()
-        self.message_hooks: list[object] = []
-        self.miku_fear_line_generator: MikuFearLineGenerator | None = None
-        if TetoMikuDualMentionHook is None:
-            print(f"[chat-hook] disabled: import failed: {HOOKS_IMPORT_ERROR}")
-        else:
-            try:
-                self.miku_fear_line_generator = MikuFearLineGenerator(
-                    client=self.client,
-                    settings=settings,
-                    normalize_model_reply=self._normalize_model_reply,
-                )
-                self.message_hooks.append(
-                    TetoMikuDualMentionHook(
-                        bot=bot,
-                        settings=settings,
-                        build_miku_tease_lines=self.miku_fear_line_generator.generate_miku_tease_lines,
-                    )
-                )
-            except Exception as exc:
-                print(f"[chat-hook] disabled: init failed: {exc}")
+        
         replay_prefix = re.escape(self.settings.command_prefix)
         self.inline_replay_pattern = re.compile(
             rf"^{replay_prefix}replaymiku(\d+)$",
@@ -102,10 +72,6 @@ class AIChatCog(commands.Cog):
     async def cog_unload(self) -> None:
         if self.cleanup_inactive_memory.is_running():
             self.cleanup_inactive_memory.cancel()
-        for hook in self.message_hooks:
-            closer = getattr(hook, "aclose", None)
-            if callable(closer):
-                await closer()
         await self.chat_memory.close()
         await self.ban_store.close()
         await self.callnames_store.close()
@@ -114,8 +80,8 @@ class AIChatCog(commands.Cog):
     @tasks.loop(seconds=CLEANUP_INTERVAL_SECONDS)
     async def cleanup_inactive_memory(self) -> None:
         try:
-            # Full channel cleanup (deletes entire history for inactive channels)
-            await self.chat_memory.prune_inactive_channels(
+            # Full user history cleanup (deletes entire history for inactive users)
+            await self.chat_memory.prune_inactive_users(
                 self.settings.memory_idle_ttl_seconds
             )
             # Image cleanup (only deletes image data for messages older than the TTL, keeps text)
@@ -129,8 +95,8 @@ class AIChatCog(commands.Cog):
     async def before_cleanup_inactive_memory(self) -> None:
         await self.bot.wait_until_ready()
 
-    async def _load_history_messages(self, channel_id: int) -> list[ChatMessage]:
-        history_raw = await self.chat_memory.get_history(channel_id)
+    async def _load_history_messages(self, user_id: int) -> list[ChatMessage]:
+        history_raw = await self.chat_memory.get_history(user_id)
         history: list[ChatMessage] = []
         for msg in history_raw:
             entry: ChatMessage = {"role": msg["role"], "content": msg["content"]}
@@ -156,6 +122,11 @@ class AIChatCog(commands.Cog):
         guild_id: int | None = None,
         user_id: int | None = None,
     ) -> str:
+        if user_id is None:
+            # Fallback for systems that don't provide user_id, 
+            # though in Discord it's usually available.
+            user_id = 0
+
         normalized_prompt = self._normalize_prompt(
             user_prompt,
             fallback_prompt or self.DEFAULT_PROMPT,
@@ -166,7 +137,7 @@ class AIChatCog(commands.Cog):
             user_id=user_id,
         )
         image_inputs = images or []
-        history = await self._load_history_messages(channel_id)
+        history = await self._load_history_messages(user_id)
         user_message: ChatMessage = {"role": "user", "content": prompt_for_llm}
         if image_inputs:
             user_message["images"] = image_inputs
@@ -190,11 +161,12 @@ class AIChatCog(commands.Cog):
 
         await self.chat_memory.append_message(
             channel_id,
+            user_id,
             "user",
             self._memory_user_entry(normalized_prompt, len(image_inputs)),
             images=image_inputs if image_inputs else None,
         )
-        await self.chat_memory.append_message(channel_id, "assistant", reply)
+        await self.chat_memory.append_message(channel_id, user_id, "assistant", reply)
         return reply
 
     async def _apply_call_preferences_to_prompt(
@@ -416,18 +388,6 @@ class AIChatCog(commands.Cog):
     async def _is_owner(self, user: discord.abc.User) -> bool:
         return await self.bot.is_owner(user)
 
-    async def _run_message_hooks(self, message: discord.Message) -> bool:
-        for hook in self.message_hooks:
-            try:
-                handler = getattr(hook, "handle_message", None)
-                if handler is None:
-                    continue
-                if await handler(message):
-                    return True
-            except Exception as exc:
-                print(f"[chat-hook] error: {exc}")
-        return False
-
     def _extract_inline_replay_id(self, content: str) -> int | None:
         matched = self.inline_replay_pattern.match(content.strip())
         if not matched:
@@ -547,9 +507,16 @@ class AIChatCog(commands.Cog):
 
     @commands.command(name="clearmemo", aliases=["resetchat"])
     async def clear_memo(self, ctx: commands.Context[commands.Bot]) -> None:
-        await self.chat_memory.clear_channel(ctx.channel.id)
+        if not await self._is_owner(ctx.author):
+            await ctx.reply(
+                "Only the bot owner can clear short-term memory.",
+                mention_author=False,
+            )
+            return
+
+        await self.chat_memory.clear_all_history()
         await ctx.reply(
-            "Cleared short-term memory for this channel.",
+            "Cleared all short-term memory for all users.",
             mention_author=False,
         )
 
@@ -591,12 +558,9 @@ class AIChatCog(commands.Cog):
 
     @commands.command(name="provider")
     async def provider(self, ctx: commands.Context[commands.Bot]) -> None:
-        model = self._active_chat_model()
         await ctx.reply(
-            f"Current provider: `{self.settings.provider}` | "
-            f"Model: `{model}` | "
-            f"Approval provider: `gemini` | "
-            f"Approval model: `{self.settings.gemini_approval_model}` | "
+            f"Provider: `NVIDIA NIM` | "
+            f"Model: `{self.settings.nvidia_model}` | "
             f"Chat DB: `{self.settings.chat_memory_db_path}` | "
             f"Ban DB: `{self.settings.ban_db_path}` | "
             f"Callnames DB: `{self.settings.callnames_db_path}` | "
@@ -610,13 +574,7 @@ class AIChatCog(commands.Cog):
         )
 
     def _active_chat_model(self) -> str:
-        if self.settings.provider == "gemini":
-            return self.settings.gemini_model
-        if self.settings.provider == "groq":
-            return self.settings.groq_model
-        if self.settings.provider == "openai":
-            return self.settings.openai_model
-        return "unknown"
+        return self.settings.nvidia_model
 
     @commands.command(name="replaymiku")
     async def replay_miku(
@@ -680,9 +638,6 @@ class AIChatCog(commands.Cog):
                 return
 
         if self.is_terminated:
-            return
-
-        if await self._run_message_hooks(message):
             return
 
         if message.author.bot:
@@ -800,6 +755,7 @@ class AIChatCog(commands.Cog):
         out = out.replace("$$", "").replace("$", "")
         out = re.sub(r"\s{2,}", " ", out)
         return out.strip()
+
 
 async def setup(bot: commands.Bot) -> None:
     settings = cast(Settings, getattr(bot, "settings"))

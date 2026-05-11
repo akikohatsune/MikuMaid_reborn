@@ -26,6 +26,7 @@ class ShortTermMemoryStore:
             CREATE TABLE IF NOT EXISTS chat_memory (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 channel_id INTEGER NOT NULL,
+                user_id INTEGER NOT NULL DEFAULT 0,
                 role TEXT NOT NULL,
                 content TEXT NOT NULL,
                 images_json TEXT,
@@ -33,11 +34,13 @@ class ShortTermMemoryStore:
             )
             """
         )
-        # Migration: Add images_json column if it doesn't exist
+        # Migration: Add images_json and user_id columns if they don't exist
         async with self._conn.execute("PRAGMA table_info(chat_memory)") as cursor:
             columns = [row[1] for row in await cursor.fetchall()]
             if "images_json" not in columns:
                 await self._conn.execute("ALTER TABLE chat_memory ADD COLUMN images_json TEXT")
+            if "user_id" not in columns:
+                await self._conn.execute("ALTER TABLE chat_memory ADD COLUMN user_id INTEGER NOT NULL DEFAULT 0")
 
         await self._conn.execute(
             """
@@ -66,7 +69,7 @@ class ShortTermMemoryStore:
             """
         )
         await self._conn.execute(
-            "CREATE INDEX IF NOT EXISTS idx_chat_memory_channel_id_id ON chat_memory (channel_id, id)"
+            "CREATE INDEX IF NOT EXISTS idx_chat_memory_user_id_id ON chat_memory (user_id, id)"
         )
         await self._conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_bot_banned_users_guild_user ON bot_banned_users (guild_id, user_id)"
@@ -84,6 +87,7 @@ class ShortTermMemoryStore:
     async def append_message(
         self,
         channel_id: int,
+        user_id: int,
         role: str,
         content: str,
         images: list[dict[str, Any]] | None = None,
@@ -96,24 +100,24 @@ class ShortTermMemoryStore:
         async with self._lock:
             conn = self._require_conn()
             await conn.execute(
-                "INSERT INTO chat_memory (channel_id, role, content, images_json) VALUES (?, ?, ?, ?)",
-                (channel_id, role, content, images_json),
+                "INSERT INTO chat_memory (channel_id, user_id, role, content, images_json) VALUES (?, ?, ?, ?, ?)",
+                (channel_id, user_id, role, content, images_json),
             )
-            await self._trim_channel(channel_id)
+            await self._trim_user_history(user_id)
             await conn.commit()
 
-    async def get_history(self, channel_id: int) -> list[dict[str, Any]]:
+    async def get_history(self, user_id: int) -> list[dict[str, Any]]:
         async with self._lock:
             conn = self._require_conn()
             cursor = await conn.execute(
                 """
                 SELECT role, content, images_json
                 FROM chat_memory
-                WHERE channel_id = ?
+                WHERE user_id = ?
                 ORDER BY id DESC
                 LIMIT ?
                 """,
-                (channel_id, self.max_messages),
+                (user_id, self.max_messages),
             )
             rows = await cursor.fetchall()
             await cursor.close()
@@ -134,10 +138,16 @@ class ShortTermMemoryStore:
             history.append(entry)
         return history
 
-    async def clear_channel(self, channel_id: int) -> None:
+    async def clear_user_history(self, user_id: int) -> None:
         async with self._lock:
             conn = self._require_conn()
-            await conn.execute("DELETE FROM chat_memory WHERE channel_id = ?", (channel_id,))
+            await conn.execute("DELETE FROM chat_memory WHERE user_id = ?", (user_id,))
+            await conn.commit()
+
+    async def clear_all_history(self) -> None:
+        async with self._lock:
+            conn = self._require_conn()
+            await conn.execute("DELETE FROM chat_memory")
             await conn.commit()
 
     async def ban_user(
@@ -265,7 +275,7 @@ class ShortTermMemoryStore:
                 return None, None
             return row[0], row[1]
 
-    async def prune_inactive_channels(self, idle_seconds: int) -> None:
+    async def prune_inactive_users(self, idle_seconds: int) -> None:
         if idle_seconds <= 0:
             return
 
@@ -274,10 +284,10 @@ class ShortTermMemoryStore:
             await conn.execute(
                 """
                 DELETE FROM chat_memory
-                WHERE channel_id IN (
-                    SELECT channel_id
+                WHERE user_id IN (
+                    SELECT user_id
                     FROM chat_memory
-                    GROUP BY channel_id
+                    GROUP BY user_id
                     HAVING MAX(created_at) < datetime('now', ?)
                 )
                 """,
@@ -292,24 +302,24 @@ class ShortTermMemoryStore:
         async with self._lock:
             conn = self._require_conn()
             # NULL out images_json for messages older than the expiry, 
-            # regardless of whether the channel is still active.
+            # regardless of whether the user is still active.
             await conn.execute(
                 "UPDATE chat_memory SET images_json = NULL WHERE created_at < datetime('now', ?)",
                 (f"-{expiry_seconds} seconds",),
             )
             await conn.commit()
 
-    async def _trim_channel(self, channel_id: int) -> None:
+    async def _trim_user_history(self, user_id: int) -> None:
         conn = self._require_conn()
         cursor = await conn.execute(
             """
             SELECT id
             FROM chat_memory
-            WHERE channel_id = ?
+            WHERE user_id = ?
             ORDER BY id DESC
             LIMIT 1 OFFSET ?
             """,
-            (channel_id, self.max_messages - 1),
+            (user_id, self.max_messages - 1),
         )
         row = await cursor.fetchone()
         await cursor.close()
@@ -319,8 +329,8 @@ class ShortTermMemoryStore:
 
         cutoff_id = row[0]
         await conn.execute(
-            "DELETE FROM chat_memory WHERE channel_id = ? AND id < ?",
-            (channel_id, cutoff_id),
+            "DELETE FROM chat_memory WHERE user_id = ? AND id < ?",
+            (user_id, cutoff_id),
         )
 
     def _require_conn(self) -> aiosqlite.Connection:

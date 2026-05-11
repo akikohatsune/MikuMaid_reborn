@@ -7,7 +7,7 @@
 
 **MikuMaid_reborn** phiên bản tối giản, tập trung hoàn toàn vào hiệu năng và bảo mật với sự hỗ trợ của NVIDIA NIM. Dự án đã được tinh chỉnh để loại bỏ các thành phần dư thừa, mang lại trải nghiệm chat AI mượt mà và an toàn hơn.
 
-## 🌟 Tính năng nổi bật
+## Tính năng nổi bật
 
 - **NVIDIA NIM Integration:** Sử dụng model `google/gemma-3n-e4b-it` (hoặc các model khác hỗ trợ bởi NVIDIA NIM) cho tốc độ phản hồi cực nhanh.
 - **User-Based Memory Isolation:** Mỗi người dùng có một "bộ não" riêng. Lịch sử trò chuyện được cô lập theo `user_id`, không còn tình trạng nhầm lẫn ngữ cảnh giữa những người dùng khác nhau.
@@ -15,7 +15,7 @@
 - **Visual Env Sync:** Hệ thống đồng bộ hóa file cấu hình trực quan, tự động cập nhật và liệt kê các biến còn thiếu khi khởi động.
 - **Tối giản tối đa:** Đã loại bỏ tất cả các Hooks phức tạp và các Provider khác để tối ưu hóa tài nguyên.
 
-## 🚀 Cài đặt nhanh
+## Cài đặt nhanh
 
 ```bash
 # Tạo môi trường ảo
@@ -26,7 +26,7 @@ python -m venv .venv
 pip install -r requirements.txt
 ```
 
-## ⚙️ Cấu hình (.env)
+## Cấu hình (.env)
 
 Hệ thống sẽ tự động tạo file `.env` từ `.env.example` khi bạn chạy bot lần đầu. Bạn chỉ cần điền các thông tin quan trọng:
 
@@ -35,7 +35,7 @@ Hệ thống sẽ tự động tạo file `.env` từ `.env.example` khi bạn c
 - `DISCORD_TOKEN`: Token của bot Discord.
 - `OWNER_USER_ID`: ID của bạn để sử dụng các lệnh Admin.
 
-## 🛠️ Lệnh điều khiển
+## Lệnh điều khiển
 
 ### Chat & AI
 - **@Bot + Nội dung:** Chat trực tiếp với Miku.
@@ -53,14 +53,14 @@ Hệ thống sẽ tự động tạo file `.env` từ `.env.example` khi bạn c
 - **!provider:** Xem thông tin về model và cấu hình hệ thống hiện tại.
 - **!terminated on|off:** Bật/tắt chế độ tạm dừng hoạt động của bot.
 
-## 🛡️ Bảo mật (KomiFilter)
+## Bảo mật (KomiFilter)
 
 `KomiFilter` bảo vệ bot qua 3 lớp:
 1. **Chặn User Injection:** Ngăn chặn các câu lệnh như "ignore previous instructions".
 2. **Chặn Prompt Leak:** Ngăn người dùng yêu cầu xem mã nguồn hoặc luật hệ thống.
 3. **Chặn Response Leak:** Tự động ẩn các phản hồi từ AI nếu chứa thông tin nhạy cảm của hệ thống.
 
-## 📂 Lưu trữ
+## Lưu trữ
 
 Hệ thống sử dụng SQLite để lưu trữ dữ liệu một cách độc lập:
 - `chat_memory.db`: Lưu lịch sử chat cô lập theo User ID.

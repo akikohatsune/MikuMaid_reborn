@@ -3,11 +3,11 @@
 </p>
 <p align="center"><span style="color:#8a8f98;">"39! NVIDIA Edition"</span></p>
 
-<h1 align="center">MikuMaid_reborn (NVIDIA NIM)</h1> 
+<h1 align="center">MikuMaid_reborn</h1> 
 
-**MikuMaid_reborn** phiên bản tối giản, tập trung hoàn toàn vào hiệu năng và bảo mật với sự hỗ trợ của NVIDIA NIM. Dự án đã được tinh chỉnh để loại bỏ các thành phần dư thừa, mang lại trải nghiệm chat AI mượt mà và an toàn hơn.
+**MikuMaid_reborn** phiên bản tối giản, tập trung hoàn toàn vào hiệu năng với sự hỗ trợ của NVIDIA NIM. Dự án đã được tinh chỉnh để loại bỏ các thành phần dư thừa.
 
-## Tính năng nổi bật
+## Tính năng
 
 - **NVIDIA NIM Integration:** Sử dụng model `google/gemma-3n-e4b-it` (hoặc các model khác hỗ trợ bởi NVIDIA NIM) cho tốc độ phản hồi cực nhanh.
 - **User-Based Memory Isolation:** Mỗi người dùng có một "bộ não" riêng. Lịch sử trò chuyện được cô lập theo `user_id`, không còn tình trạng nhầm lẫn ngữ cảnh giữa những người dùng khác nhau.

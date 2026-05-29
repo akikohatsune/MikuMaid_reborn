@@ -84,13 +84,13 @@ class BanControlCog(commands.Cog):
 
         if created:
             await ctx.reply(
-                f"Blocked <@{user_id}> from chatting with the AI bot.",
+                f"Đã block <@{user_id}> khỏi bot.",
                 mention_author=False,
             )
             return
 
         await ctx.reply(
-            f"Updated block entry for <@{user_id}>.",
+            f"Đã cập nhật block cho <@{user_id}>.",
             mention_author=False,
         )
 
@@ -116,13 +116,13 @@ class BanControlCog(commands.Cog):
         removed = await self.store.unban_user(guild.id, user_id)
         if removed:
             await ctx.reply(
-                f"Unblocked <@{user_id}>. They can now chat with the AI bot.",
+                f"Đã unblock <@{user_id}>. Họ có thể sử dụng bot trở lại.",
                 mention_author=False,
             )
             return
 
         await ctx.reply(
-            f"<@{user_id}> is not currently blocked.",
+            f"<@{user_id}> hiện không bị block.",
             mention_author=False,
         )
 

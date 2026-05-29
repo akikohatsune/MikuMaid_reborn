@@ -215,3 +215,7 @@ __marimo__/
 
 
 .vscode/
+
+test.db
+test.db-shm
+test.db-wal

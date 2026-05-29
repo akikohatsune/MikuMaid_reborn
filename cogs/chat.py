@@ -558,9 +558,11 @@ class AIChatCog(commands.Cog):
 
     @commands.command(name="provider")
     async def provider(self, ctx: commands.Context[commands.Bot]) -> None:
+        cmd_names = [c.name for c in self.bot.commands]
         await ctx.reply(
             f"Provider: `NVIDIA NIM` | "
             f"Model: `{self.settings.nvidia_model}` | "
+            f"Commands: {', '.join(cmd_names)} | "
             f"Chat DB: `{self.settings.chat_memory_db_path}` | "
             f"Ban DB: `{self.settings.ban_db_path}` | "
             f"Callnames DB: `{self.settings.callnames_db_path}` | "
@@ -568,7 +570,6 @@ class AIChatCog(commands.Cog):
             f"Image limit: `{self.settings.image_max_bytes}` bytes | "
             f"Reply chunk size: `{self.settings.max_reply_chars}` chars | "
             f"KomiFilter: `{self.settings.komifilter_enabled}` | "
-            f"KomiFilter max check: `{self.settings.komifilter_max_check_chars}` | "
             f"KomiFilter leak block: `{self.settings.komifilter_block_response_on_leak}` | "
             f"Terminated: `{self.is_terminated}`"
         )

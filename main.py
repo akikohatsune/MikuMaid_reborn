@@ -30,6 +30,10 @@ class MikuAIBot(commands.Bot):
             if file.name.startswith("_"):
                 continue
             await self.load_extension(f"cogs.{file.stem}")
+        
+        print("Loaded cogs:", list(self.cogs.keys()))
+        print("Commands:", [c.name for c in self.commands])
+
         synced = await self.tree.sync()
         print(f"Synced {len(synced)} slash command(s).")
 
@@ -48,7 +52,7 @@ class MikuAIBot(commands.Bot):
 
     async def on_command_error(self, ctx: commands.Context, error: commands.CommandError) -> None:
         if isinstance(error, commands.CommandNotFound):
-            print(f"[CommandNotFound] User {ctx.author} tried to use an unknown command: {ctx.message.content}")
+            print(f"[CommandNotFound] User {ctx.author} tried to use unknown command '{ctx.invoked_with}'. Full message: {ctx.message.content}")
         else:
             print(f"[CommandError] {ctx.command}: {error}")
             try:

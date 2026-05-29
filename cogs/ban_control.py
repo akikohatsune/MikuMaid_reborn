@@ -38,6 +38,17 @@ class BanControlCog(commands.Cog):
         await ctx.reply("Only the bot owner can use this command.", mention_author=False)
         return False
 
+    def _parse_user_id(self, target: str) -> int | None:
+        target = target.strip()
+        if target.startswith("<@") and target.endswith(">"):
+            target = target[2:-1]
+            if target.startswith("!"):
+                target = target[1:]
+        try:
+            return int(target)
+        except ValueError:
+            return None
+
     @commands.command(
         name="ban",
         help="Ban a user from using the AI bot",
@@ -45,10 +56,15 @@ class BanControlCog(commands.Cog):
     async def ban_user(
         self,
         ctx: commands.Context[commands.Bot],
-        user_id: int,
+        target: str,
         *,
         reason: str | None = None,
     ) -> None:
+        user_id = self._parse_user_id(target)
+        if user_id is None:
+            await ctx.reply("Invalid user ID or mention.", mention_author=False)
+            return
+
         if not await self._ensure_owner_permission(ctx):
             return
 
@@ -84,8 +100,13 @@ class BanControlCog(commands.Cog):
     async def remove_ban(
         self,
         ctx: commands.Context[commands.Bot],
-        user_id: int,
+        target: str,
     ) -> None:
+        user_id = self._parse_user_id(target)
+        if user_id is None:
+            await ctx.reply("Invalid user ID or mention.", mention_author=False)
+            return
+
         if not await self._ensure_owner_permission(ctx):
             return
 
@@ -102,6 +123,16 @@ class BanControlCog(commands.Cog):
             f"<@{user_id}> is not currently in the ban list.",
             mention_author=False,
         )
+
+    async def cog_command_error(
+        self,
+        ctx: commands.Context[commands.Bot],
+        error: commands.CommandError,
+    ) -> None:
+        if isinstance(error, commands.MissingRequiredArgument):
+            await ctx.reply(f"Missing required argument: `{error.param.name}`. Please check your command.", mention_author=False)
+        else:
+            await ctx.reply(f"An error occurred: {error}", mention_author=False)
 
 
 async def setup(bot: commands.Bot) -> None:

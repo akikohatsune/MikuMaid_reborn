@@ -51,6 +51,7 @@ class BanControlCog(commands.Cog):
 
     @commands.command(
         name="ban",
+        aliases=["banuser", "block", "cấm"],
         help="Ban a user from using the AI bot",
     )
     async def ban_user(
@@ -95,6 +96,7 @@ class BanControlCog(commands.Cog):
 
     @commands.command(
         name="removeban",
+        aliases=["unban", "unblock", "bỏcấm"],
         help="Remove AI-bot ban from a user",
     )
     async def remove_ban(

@@ -31,7 +31,6 @@ class BackgroundTasksCog(commands.Cog):
             except Exception as e:
                 print(f"Could not notify owner of scheduled restart: {e}")
         
-        await self.bot.close()
         clear_pycache()
         
         print("Restarting bot process...")

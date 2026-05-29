@@ -480,7 +480,7 @@ class AIChatCog(commands.Cog):
             user_id=ctx.author.id,
         ):
             await ctx.reply(
-                "You are banned from using the AI bot in this server.",
+                "Bạn đã bị ban bot và ko thể sử dụng bot",
                 mention_author=False,
             )
             return
@@ -636,6 +636,10 @@ class AIChatCog(commands.Cog):
                 guild_id=message.guild.id if message.guild else None,
                 user_id=message.author.id,
             ):
+                await message.reply(
+                    "Bạn đã bị ban bot và ko thể sử dụng bot",
+                    mention_author=False,
+                )
                 return
 
         if self.is_terminated:

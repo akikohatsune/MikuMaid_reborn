@@ -646,8 +646,9 @@ class AIChatCog(commands.Cog):
         if self._looks_like_chat_command(message.content):
             return
 
-        # Bot auto-reply when mentioned directly.
-        if me in message.mentions:
+        # Bot auto-reply when mentioned directly OR in DMs.
+        is_dm = message.guild is None
+        if is_dm or me in message.mentions:
             mention_text = message.content.replace(f"<@{me.id}>", "").replace(
                 f"<@!{me.id}>", ""
             )
@@ -661,7 +662,7 @@ class AIChatCog(commands.Cog):
                 user_id=message.author.id,
                 user_name=message.author.name,
                 user_display=message.author.display_name,
-                trigger="mention",
+                trigger="dm" if is_dm else "mention",
             )
 
     def _looks_like_chat_command(self, content: str) -> bool:

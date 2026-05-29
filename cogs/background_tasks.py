@@ -23,6 +23,11 @@ class BackgroundTasksCog(commands.Cog):
     @tasks.loop(hours=12)
     async def scheduled_restart(self):
         """Periodically restarts the bot and clears cache for stability."""
+        # tasks.loop fires the first iteration immediately on start.
+        # Skip it so we only restart after the configured interval.
+        if self.scheduled_restart.current_loop == 0:
+            return
+
         print(f"Scheduled restart triggered after {self.settings.restart_interval_hours} hours...")
         if self.bot.owner_id:
             try:

@@ -50,11 +50,11 @@ class BanControlCog(commands.Cog):
             return None
 
     @commands.command(
-        name="ban",
-        aliases=["banuser", "block", "cấm"],
-        help="Ban a user from using the AI bot",
+        name="blockchat",
+        aliases=["block", "cấm"],
+        help="Block a user from using the AI bot",
     )
-    async def ban_user(
+    async def block_user(
         self,
         ctx: commands.Context[commands.Bot],
         target: str,
@@ -71,7 +71,7 @@ class BanControlCog(commands.Cog):
 
         user = self.bot.get_user(user_id)
         if user and user.bot:
-            await ctx.reply("You cannot ban a bot account.", mention_author=False)
+            await ctx.reply("You cannot block a bot account.", mention_author=False)
             return
 
         guild = cast(discord.Guild, ctx.guild)
@@ -84,22 +84,22 @@ class BanControlCog(commands.Cog):
 
         if created:
             await ctx.reply(
-                f"Banned <@{user_id}> from using the AI bot.",
+                f"Blocked <@{user_id}> from chatting with the AI bot.",
                 mention_author=False,
             )
             return
 
         await ctx.reply(
-            f"Updated ban entry for <@{user_id}>.",
+            f"Updated block entry for <@{user_id}>.",
             mention_author=False,
         )
 
     @commands.command(
-        name="removeban",
-        aliases=["unban", "unblock", "bỏcấm"],
-        help="Remove AI-bot ban from a user",
+        name="unblockchat",
+        aliases=["unban", "unblock", "bỏcấm", "removeban"],
+        help="Unblock a user from chatting with the AI bot",
     )
-    async def remove_ban(
+    async def unblock_user(
         self,
         ctx: commands.Context[commands.Bot],
         target: str,
@@ -116,13 +116,13 @@ class BanControlCog(commands.Cog):
         removed = await self.store.unban_user(guild.id, user_id)
         if removed:
             await ctx.reply(
-                f"Removed AI-bot ban for <@{user_id}>.",
+                f"Unblocked <@{user_id}>. They can now chat with the AI bot.",
                 mention_author=False,
             )
             return
 
         await ctx.reply(
-            f"<@{user_id}> is not currently in the ban list.",
+            f"<@{user_id}> is not currently blocked.",
             mention_author=False,
         )
 

@@ -46,6 +46,16 @@ class MikuAIBot(commands.Bot):
         print(f"Model: {self._active_chat_model()}")
         print("---")
 
+    async def on_command_error(self, ctx: commands.Context, error: commands.CommandError) -> None:
+        if isinstance(error, commands.CommandNotFound):
+            print(f"[CommandNotFound] User {ctx.author} tried to use an unknown command: {ctx.message.content}")
+        else:
+            print(f"[CommandError] {ctx.command}: {error}")
+            try:
+                await ctx.reply(f"An error occurred: {error}", mention_author=False)
+            except discord.HTTPException:
+                pass
+
     def _active_chat_model(self) -> str:
         if self.settings.provider == "gemini":
             return self.settings.gemini_model

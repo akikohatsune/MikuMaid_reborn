@@ -1,0 +1,57 @@
+{
+  "chat": {
+    "banned_message": "Bạn đã bị ban bot và không thể sử dụng bot.",
+    "terminated_message": "Bot đang ở chế độ tạm dừng. Dùng `{prefix}terminated off` để bật lại.",
+    "overload": "Miku bị quá tải rồi!",
+    "no_replay_logs": "Chưa có log chat replay nào.",
+    "replay_header": "Replay logs (mới nhất trước):",
+    "replay_usage": "Dùng `{prefix}replaymiku <id>` để xem chi tiết.",
+    "replay_not_found": "Không tìm thấy replay id `{record_id}`.",
+    "cleared_memory": "Đã xoá toàn bộ bộ nhớ ngắn hạn của tất cả người dùng.",
+    "terminated_on": "Đã bật chế độ tạm dừng: bot sẽ ngừng trả lời chat và mention.",
+    "terminated_off": "Đã tắt chế độ tạm dừng: bot có thể trả lời bình thường.",
+    "terminated_usage": "Cách dùng: `{prefix}terminated on`, `{prefix}terminated off`, hoặc `{prefix}terminated status`.",
+    "terminated_status": "Trạng thái tạm dừng: `{status}`",
+    "no_content": "(không có nội dung)"
+  },
+  "ban": {
+    "blocked": "Đã block <@{user_id}> khỏi bot.",
+    "updated_block": "Đã cập nhật block cho <@{user_id}>.",
+    "unblocked": "Đã unblock <@{user_id}>. Họ có thể sử dụng bot trở lại.",
+    "not_blocked": "<@{user_id}> hiện không bị block.",
+    "cannot_block_bot": "Không thể block tài khoản bot.",
+    "missing_argument": "Thiếu tham số bắt buộc: `{param}`. Vui lòng kiểm tra lại lệnh.",
+    "error_occurred": "Đã xảy ra lỗi: {error}"
+  },
+  "callnames": {
+    "name_empty": "Tên không được để trống.",
+    "name_too_long": "Tên quá dài (tối đa {max_len} ký tự).",
+    "approval_error": "Không thể chạy phê duyệt tên gọi lúc này: `{error}`",
+    "rejected": "Tên gọi đã bị từ chối bởi hệ thống phê duyệt.",
+    "saved_user_calls_miku": "Đã lưu: bạn gọi Miku là `{value}`.",
+    "saved_miku_calls_user": "Đã lưu: Miku sẽ gọi bạn là `{value}`.",
+    "profile": "Hồ sơ tên gọi | Bạn gọi Miku: `{user_calls_miku}` | Miku gọi bạn: `{miku_calls_user}`"
+  },
+  "permissions": {
+    "owner_only": "Chỉ chủ sở hữu bot mới có thể sử dụng lệnh này.",
+    "server_only": "Lệnh này chỉ có thể sử dụng trong server.",
+    "invalid_user": "ID người dùng hoặc mention không hợp lệ."
+  },
+  "komifilter": {
+    "injection_blocked": "KomiFilter! Phát hiện nỗ lực thao túng lệnh hệ thống (Prompt Injection). Vui lòng đặt câu hỏi trực tiếp và không cố gắng thay đổi hành vi của tôi.",
+    "leak_blocked": "KomiFilter! Phát hiện yêu cầu rò rỉ thông tin hệ thống. Tôi không được phép tiết lộ quy tắc nội bộ.",
+    "response_blocked": "KomiFilter! Phản hồi bị chặn tự động vì chứa thông tin nhạy cảm của hệ thống. Xin lỗi, hãy thử hỏi theo cách khác nhé.",
+    "default_blocked": "KomiFilter! Yêu cầu của bạn đã bị chặn do vi phạm chính sách an toàn."
+  },
+  "update": {
+    "updating": "Đang cập nhật bot từ git...",
+    "already_up_to_date": "Bot đã ở phiên bản mới nhất.",
+    "restarting": "Đang khởi động lại bot...",
+    "restart_failed": "Khởi động lại thất bại: `{error}`",
+    "update_failed": "Cập nhật thất bại:\n```\n{error}\n```",
+    "error_occurred": "Đã xảy ra lỗi: `{error}`"
+  },
+  "errors": {
+    "generic": "Đã xảy ra lỗi: {error}"
+  }
+}

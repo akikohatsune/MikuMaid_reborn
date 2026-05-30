@@ -69,6 +69,15 @@ class ShortTermMemoryStore:
             """
         )
         await self._conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS user_language_prefs (
+                user_id INTEGER PRIMARY KEY,
+                lang_code TEXT NOT NULL DEFAULT 'en',
+                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+        )
+        await self._conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_chat_memory_user_id_id ON chat_memory (user_id, id)"
         )
         await self._conn.execute(
@@ -274,6 +283,34 @@ class ShortTermMemoryStore:
             if row is None:
                 return None, None
             return row[0], row[1]
+
+    async def set_user_language(self, user_id: int, lang_code: str) -> None:
+        """Save or update the language preference for a user."""
+        async with self._lock:
+            conn = self._require_conn()
+            await conn.execute(
+                """
+                INSERT INTO user_language_prefs (user_id, lang_code)
+                VALUES (?, ?)
+                ON CONFLICT(user_id) DO UPDATE SET
+                    lang_code = excluded.lang_code,
+                    updated_at = CURRENT_TIMESTAMP
+                """,
+                (user_id, lang_code),
+            )
+            await conn.commit()
+
+    async def get_user_language(self, user_id: int) -> str | None:
+        """Retrieve the stored language preference for a user."""
+        async with self._lock:
+            conn = self._require_conn()
+            cursor = await conn.execute(
+                "SELECT lang_code FROM user_language_prefs WHERE user_id = ? LIMIT 1",
+                (user_id,),
+            )
+            row = await cursor.fetchone()
+            await cursor.close()
+            return row[0] if row else None
 
     async def prune_inactive_users(self, idle_seconds: int) -> None:
         if idle_seconds <= 0:

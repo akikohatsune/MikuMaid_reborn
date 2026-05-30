@@ -10,6 +10,7 @@ import discord
 from discord.ext import commands, tasks
 
 from config import Settings
+from i18n import t, detect_language
 
 
 class AutoupdateCog(commands.Cog):
@@ -98,11 +99,12 @@ class AutoupdateCog(commands.Cog):
 
     @commands.command(name="update")
     async def update_bot(self, ctx: commands.Context[commands.Bot]) -> None:
+        locale = detect_language(ctx.message.content)
         if not await self._is_owner(ctx.author):
-            await ctx.reply("Only the bot owner can use this command.", mention_author=False)
+            await ctx.reply(t("permissions.owner_only", locale), mention_author=False)
             return
 
-        await ctx.reply("Updating bot from git...", mention_author=False)
+        await ctx.reply(t("update.updating", locale), mention_author=False)
         try:
             # Use subprocess to run git pull
             result = subprocess.run(
@@ -111,28 +113,29 @@ class AutoupdateCog(commands.Cog):
             )
             output = result.stdout or result.stderr
             if "Already up to date." in output:
-                await ctx.reply("The bot is already up to date.", mention_author=False)
+                await ctx.reply(t("update.already_up_to_date", locale), mention_author=False)
             else:
                 await self._run_update_flow(output, ctx)
 
         except subprocess.CalledProcessError as exc:
             await ctx.reply(f"Update failed:\n```\n{exc.stderr[:1800]}\n```", mention_author=False)
         except Exception as exc:
-            await ctx.reply(f"An error occurred: `{exc}`", mention_author=False)
+            await ctx.reply(t("update.error_occurred", locale, error=exc), mention_author=False)
 
     @commands.command(name="restart")
     async def restart_bot(self, ctx: commands.Context[commands.Bot]) -> None:
+        locale = detect_language(ctx.message.content)
         if not await self._is_owner(ctx.author):
-            await ctx.reply("Only the bot owner can use this command.", mention_author=False)
+            await ctx.reply(t("permissions.owner_only", locale), mention_author=False)
             return
 
-        await ctx.reply("Restarting bot...", mention_author=False)
+        await ctx.reply(t("update.restarting", locale), mention_author=False)
         
         # Close the bot and restart the process
         try:
             os.execv(sys.executable, [sys.executable] + sys.argv)
         except Exception as exc:
-            await ctx.reply(f"Restart failed: `{exc}`", mention_author=False)
+            await ctx.reply(t("update.restart_failed", locale, error=exc), mention_author=False)
 
 
 async def setup(bot: commands.Bot) -> None:

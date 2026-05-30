@@ -15,6 +15,7 @@ from client import ChatMessage, ImageInput, LLMClient
 from komifilter import KomiFilter
 from logger.chat_logger import ChatReplayLogger
 from memory_store import ShortTermMemoryStore
+from i18n import t, detect_language
 
 LOGGER = logging.getLogger(__name__)
 
@@ -27,7 +28,7 @@ class AIChatCog(commands.Cog):
     SUPPORTED_PREFIX_COMMANDS = {"chat", "ask"}
     EVERYONE_MENTION_PATTERN = re.compile(r"@everyone", flags=re.IGNORECASE)
     HERE_MENTION_PATTERN = re.compile(r"@here", flags=re.IGNORECASE)
-    OVERLOAD_REPLY = "i overload!"
+    # OVERLOAD_REPLY now uses i18n via t("chat.overload", locale)
 
     def __init__(self, bot: commands.Bot, settings: Settings):
         self.bot = bot
@@ -113,6 +114,25 @@ class AIChatCog(commands.Cog):
             return prompt
         return f"{prompt}\n[attached_images={image_count}]"
 
+    async def _get_locale(self, user_id: int, text: str = "") -> str:
+        """Resolve locale: stored preference → auto-detect → default."""
+        stored = await self.chat_memory.get_user_language(user_id)
+        if stored:
+            return stored
+        if text:
+            return detect_language(text)
+        return "en"
+
+    async def _update_user_locale(self, user_id: int, text: str) -> str:
+        """Detect language from text, save it, and return the locale."""
+        if not text or len(text.strip()) < 8:
+            # Too short to detect reliably — use stored preference
+            return await self._get_locale(user_id, text)
+        detected = detect_language(text)
+        # Only save if we actually detected something meaningful
+        await self.chat_memory.set_user_language(user_id, detected)
+        return detected
+
     async def _generate_reply(
         self,
         channel_id: int,
@@ -121,6 +141,7 @@ class AIChatCog(commands.Cog):
         fallback_prompt: str | None = None,
         guild_id: int | None = None,
         user_id: int | None = None,
+        locale: str | None = None,
     ) -> str:
         if user_id is None:
             # Fallback for systems that don't provide user_id, 
@@ -135,6 +156,7 @@ class AIChatCog(commands.Cog):
             normalized_prompt,
             guild_id=guild_id,
             user_id=user_id,
+            locale=locale,
         )
         image_inputs = images or []
         history = await self._load_history_messages(user_id)
@@ -157,7 +179,7 @@ class AIChatCog(commands.Cog):
                 reply_filter.category,
                 ",".join(reply_filter.matches),
             )
-            reply = self.komifilter.reply_block_message()
+            reply = self.komifilter.reply_block_message(locale=locale)
 
         await self.chat_memory.append_message(
             channel_id,
@@ -174,22 +196,29 @@ class AIChatCog(commands.Cog):
         prompt: str,
         guild_id: int | None,
         user_id: int | None,
+        locale: str | None = None,
     ) -> str:
-        if guild_id is None or user_id is None:
+        parts: list[str] = []
+
+        # Inject language preference so the LLM knows which language to use
+        if locale:
+            parts.append(f"[language_preference] user prefers: {locale}")
+
+        if guild_id is not None and user_id is not None:
+            user_calls_miku, miku_calls_user = await self.callnames_store.get_user_call_preferences(
+                guild_id=guild_id,
+                user_id=user_id,
+            )
+            if user_calls_miku or miku_calls_user:
+                parts.append("[call_profile_context]")
+                if user_calls_miku:
+                    parts.append(f"user calls Miku: {user_calls_miku}")
+                if miku_calls_user:
+                    parts.append(f"Miku calls user: {miku_calls_user}")
+
+        if not parts:
             return prompt
 
-        user_calls_miku, miku_calls_user = await self.callnames_store.get_user_call_preferences(
-            guild_id=guild_id,
-            user_id=user_id,
-        )
-        if not user_calls_miku and not miku_calls_user:
-            return prompt
-
-        parts = ["[call_profile_context]"]
-        if user_calls_miku:
-            parts.append(f"user calls Miku: {user_calls_miku}")
-        if miku_calls_user:
-            parts.append(f"Miku calls user: {miku_calls_user}")
         parts.append("[message_content]")
         parts.append(prompt)
         return "\n".join(parts)
@@ -242,10 +271,13 @@ class AIChatCog(commands.Cog):
         if source_message_id is not None and source_message_id in self.deleted_message_ids:
             return
 
+        # Auto-detect and persist language from user's message
+        locale = await self._update_user_locale(user_id or 0, prompt)
+
         effective_prompt = self._normalize_prompt(prompt, fallback_prompt)
         prompt_filter = self.komifilter.inspect_user_prompt(effective_prompt)
         if prompt_filter.blocked:
-            block_reply = self.komifilter.user_block_message(prompt_filter)
+            block_reply = self.komifilter.user_block_message(prompt_filter, locale=locale)
             LOGGER.warning(
                 "komifilter blocked user prompt user=%s channel=%s trigger=%s "
                 "category=%s matches=%s",
@@ -282,9 +314,10 @@ class AIChatCog(commands.Cog):
                     fallback_prompt=fallback_prompt,
                     guild_id=guild_id,
                     user_id=user_id,
+                    locale=locale,
                 )
             except Exception as exc:
-                await self._send_error(target, exc)
+                await self._send_error(target, exc, locale=locale)
                 return
 
         if source_message_id is not None and source_message_id in self.deleted_message_ids:
@@ -377,9 +410,10 @@ class AIChatCog(commands.Cog):
         self,
         target: commands.Context[commands.Bot] | discord.Message,
         exc: Exception,
+        locale: str | None = None,
     ) -> None:
         LOGGER.exception("AI reply failed: %s", exc)
-        message = self.OVERLOAD_REPLY
+        message = t("chat.overload", locale)
         if isinstance(target, commands.Context):
             await target.reply(message, mention_author=False)
             return
@@ -414,9 +448,9 @@ class AIChatCog(commands.Cog):
                 guild_id=guild_id,
             )
             if not records:
-                return "No chat replay logs yet."
+                return t("chat.no_replay_logs", "en")
 
-            lines: list[str] = ["Replay logs (newest first):"]
+            lines: list[str] = [t("chat.replay_header", "en")]
             for record_id, item in records:
                 ts = item.get("ts_utc", "?")
                 trigger = item.get("trigger", "?")
@@ -429,7 +463,7 @@ class AIChatCog(commands.Cog):
                     f"[{record_id}] {ts} | {user_display} ({user_id}) | {trigger} | {prompt}"
                 )
             lines.append(
-                f"Use `{self.settings.command_prefix}replaymiku <id>` to view full details."
+                t("chat.replay_usage", "en", prefix=self.settings.command_prefix)
             )
             return "\n".join(lines)
 
@@ -446,7 +480,7 @@ class AIChatCog(commands.Cog):
             guild_id=guild_id,
         )
         if item is None:
-            return f"Replay id `{record_id}` not found."
+            return t("chat.replay_not_found", "en", record_id=record_id)
 
         prompt = str(item.get("prompt", "(empty)")).strip()
         lines = [
@@ -475,19 +509,21 @@ class AIChatCog(commands.Cog):
         prompt: str | None = None,
     ) -> None:
         """Chat with the AI bot."""
+        locale = await self._get_locale(ctx.author.id, ctx.message.content)
+
         if await self._is_banned_user(
             guild_id=ctx.guild.id if ctx.guild else None,
             user_id=ctx.author.id,
         ):
             await ctx.reply(
-                "Bạn đã bị ban bot và ko thể sử dụng bot",
+                t("chat.banned_message", locale),
                 mention_author=False,
             )
             return
 
         if self.is_terminated:
             await ctx.reply(
-                "Bot is in terminated mode. Use `!terminated off` to enable replies again.",
+                t("chat.terminated_message", locale, prefix=self.settings.command_prefix),
                 mention_author=False,
             )
             return
@@ -507,16 +543,17 @@ class AIChatCog(commands.Cog):
 
     @commands.command(name="clearmemo", aliases=["resetchat"])
     async def clear_memo(self, ctx: commands.Context[commands.Bot]) -> None:
+        locale = await self._get_locale(ctx.author.id, ctx.message.content)
         if not await self._is_owner(ctx.author):
             await ctx.reply(
-                "Only the bot owner can clear short-term memory.",
+                t("permissions.owner_only", locale),
                 mention_author=False,
             )
             return
 
         await self.chat_memory.clear_all_history()
         await ctx.reply(
-            "Cleared all short-term memory for all users.",
+            t("chat.cleared_memory", locale),
             mention_author=False,
         )
 
@@ -526,11 +563,12 @@ class AIChatCog(commands.Cog):
         ctx: commands.Context[commands.Bot],
         mode: str = "on",
     ) -> None:
+        locale = await self._get_locale(ctx.author.id, ctx.message.content)
         action = mode.strip().lower()
         if action in {"on", "1", "true"}:
             self.is_terminated = True
             await ctx.reply(
-                "Terminated mode enabled: bot will stop replying to chat and mentions.",
+                t("chat.terminated_on", locale),
                 mention_author=False,
             )
             return
@@ -538,7 +576,7 @@ class AIChatCog(commands.Cog):
         if action in {"off", "0", "false"}:
             self.is_terminated = False
             await ctx.reply(
-                "Terminated mode disabled: bot can reply normally again.",
+                t("chat.terminated_off", locale),
                 mention_author=False,
             )
             return
@@ -546,13 +584,13 @@ class AIChatCog(commands.Cog):
         if action == "status":
             status = "ON" if self.is_terminated else "OFF"
             await ctx.reply(
-                f"Terminated status: `{status}`",
+                t("chat.terminated_status", locale, status=status),
                 mention_author=False,
             )
             return
 
         await ctx.reply(
-            "Usage: `!terminated on`, `!terminated off`, or `!terminated status`.",
+            t("chat.terminated_usage", locale, prefix=self.settings.command_prefix),
             mention_author=False,
         )
 
@@ -583,9 +621,10 @@ class AIChatCog(commands.Cog):
         ctx: commands.Context[commands.Bot],
         action: str = "ls",
     ) -> None:
+        locale = await self._get_locale(ctx.author.id, ctx.message.content)
         if not await self._is_owner(ctx.author):
             await ctx.reply(
-                "Only the bot owner can use this command.",
+                t("permissions.owner_only", locale),
                 mention_author=False,
             )
             return
@@ -614,9 +653,10 @@ class AIChatCog(commands.Cog):
 
         replay_id = self._extract_inline_replay_id(message.content)
         if replay_id is not None and not message.author.bot:
+            locale = await self._get_locale(message.author.id, message.content)
             if not await self._is_owner(message.author):
                 await message.reply(
-                    "Only the bot owner can use this command.",
+                    t("permissions.owner_only", locale),
                     mention_author=False,
                 )
                 return
@@ -636,8 +676,9 @@ class AIChatCog(commands.Cog):
                 guild_id=message.guild.id if message.guild else None,
                 user_id=message.author.id,
             ):
+                locale = await self._get_locale(message.author.id, message.content)
                 await message.reply(
-                    "Bạn đã bị ban bot và ko thể sử dụng bot",
+                    t("chat.banned_message", locale),
                     mention_author=False,
                 )
                 return
@@ -702,7 +743,7 @@ class AIChatCog(commands.Cog):
     ) -> None:
         text = self._sanitize_bot_output(text)
         max_len = 1900
-        chunks = self._split_message_smartly(text, max_len) or ["(no content)"]
+        chunks = self._split_message_smartly(text, max_len) or [t("chat.no_content")]
 
         for idx, chunk in enumerate(chunks):
             if isinstance(target, commands.Context):

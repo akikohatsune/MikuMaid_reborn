@@ -6,6 +6,7 @@ from discord.ext import commands
 
 from client import LLMClient
 from config import Settings
+from i18n import t, detect_language
 from memory_store import ShortTermMemoryStore
 
 
@@ -31,12 +32,19 @@ class CallNamesCog(commands.Cog):
     def _scope_guild_id(self, ctx: commands.Context[commands.Bot]) -> int:
         return ctx.guild.id if ctx.guild else 0
 
+    async def _get_locale(self, ctx: commands.Context[commands.Bot]) -> str:
+        stored = await self.store.get_user_language(ctx.author.id)
+        if stored:
+            return stored
+        return detect_language(ctx.message.content)
+
     async def _approval_or_reject(
         self,
         ctx: commands.Context[commands.Bot],
         *,
         field_name: str,
         value: str,
+        locale: str,
     ) -> bool:
         try:
             approved = await self.client.approve_call_name(
@@ -45,7 +53,7 @@ class CallNamesCog(commands.Cog):
             )
         except Exception as exc:
             await ctx.reply(
-                f"Unable to run call-name approval right now: `{exc}`",
+                t("callnames.approval_error", locale, error=exc),
                 mention_author=False,
             )
             return False
@@ -53,7 +61,7 @@ class CallNamesCog(commands.Cog):
         if approved:
             return True
 
-        await ctx.reply("Call-name was rejected by approval (`no`).", mention_author=False)
+        await ctx.reply(t("callnames.rejected", locale), mention_author=False)
         return False
 
     def _normalize_call_name(
@@ -73,16 +81,17 @@ class CallNamesCog(commands.Cog):
         *,
         raw_name: str,
         field_name: str,
-        success_message: str,
+        success_key: str,
         saver: Callable[[int, int, str], Awaitable[None]],
+        locale: str,
     ) -> None:
         value = self._normalize_call_name(raw_name)
         if value is None:
             if not raw_name.strip():
-                await ctx.reply("Name cannot be empty.", mention_author=False)
+                await ctx.reply(t("callnames.name_empty", locale), mention_author=False)
             else:
                 await ctx.reply(
-                    f"Name is too long (max {self.MAX_CALL_NAME_LENGTH} characters).",
+                    t("callnames.name_too_long", locale, max_len=self.MAX_CALL_NAME_LENGTH),
                     mention_author=False,
                 )
             return
@@ -91,6 +100,7 @@ class CallNamesCog(commands.Cog):
             ctx,
             field_name=field_name,
             value=value,
+            locale=locale,
         ):
             return
 
@@ -100,7 +110,7 @@ class CallNamesCog(commands.Cog):
             value,
         )
         await ctx.reply(
-            success_message.format(value=value),
+            t(success_key, locale, value=value),
             mention_author=False,
         )
 
@@ -116,12 +126,14 @@ class CallNamesCog(commands.Cog):
         *,
         name: str,
     ) -> None:
+        locale = await self._get_locale(ctx)
         await self._set_call_name_with_approval(
             ctx,
             raw_name=name,
             field_name="user_calls_miku",
-            success_message="Saved: you call Miku `{value}`.",
+            success_key="callnames.saved_user_calls_miku",
             saver=self.store.set_user_calls_miku,
+            locale=locale,
         )
 
     @commands.hybrid_command(
@@ -136,12 +148,14 @@ class CallNamesCog(commands.Cog):
         *,
         name: str,
     ) -> None:
+        locale = await self._get_locale(ctx)
         await self._set_call_name_with_approval(
             ctx,
             raw_name=name,
             field_name="miku_calls_user",
-            success_message="Saved: Miku will call you `{value}`.",
+            success_key="callnames.saved_miku_calls_user",
             saver=self.store.set_miku_calls_user,
+            locale=locale,
         )
 
     @commands.hybrid_command(
@@ -151,14 +165,18 @@ class CallNamesCog(commands.Cog):
         description="Show your call-name profile with Miku",
     )
     async def show_call_profile(self, ctx: commands.Context[commands.Bot]) -> None:
+        locale = await self._get_locale(ctx)
         user_calls_miku, miku_calls_user = await self.store.get_user_call_preferences(
             guild_id=self._scope_guild_id(ctx),
             user_id=ctx.author.id,
         )
         await ctx.reply(
-            "Current call profile | "
-            f"You call Miku: `{user_calls_miku or 'Miku'}` | "
-            f"Miku calls you: `{miku_calls_user or ctx.author.display_name}`",
+            t(
+                "callnames.profile",
+                locale,
+                user_calls_miku=user_calls_miku or "Miku",
+                miku_calls_user=miku_calls_user or ctx.author.display_name,
+            ),
             mention_author=False,
         )
 

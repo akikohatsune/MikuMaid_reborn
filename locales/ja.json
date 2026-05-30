@@ -1,0 +1,57 @@
+{
+  "chat": {
+    "banned_message": "あなたはBotからBANされており、使用できません。",
+    "terminated_message": "Botは停止モードです。`{prefix}terminated off` で再度有効にできます。",
+    "overload": "ミクがオーバーロードしちゃった！",
+    "no_replay_logs": "チャットリプレイログはまだありません。",
+    "replay_header": "リプレイログ（新しい順）：",
+    "replay_usage": "`{prefix}replaymiku <id>` で詳細を確認できます。",
+    "replay_not_found": "リプレイID `{record_id}` が見つかりません。",
+    "cleared_memory": "全ユーザーの短期メモリをクリアしました。",
+    "terminated_on": "停止モードが有効になりました：Botはチャットやメンションに返信しません。",
+    "terminated_off": "停止モードが無効になりました：Botは通常通り返信できます。",
+    "terminated_usage": "使い方: `{prefix}terminated on`、`{prefix}terminated off`、または `{prefix}terminated status`。",
+    "terminated_status": "停止モード状態: `{status}`",
+    "no_content": "（内容なし）"
+  },
+  "ban": {
+    "blocked": "<@{user_id}> をBotからブロックしました。",
+    "updated_block": "<@{user_id}> のブロックを更新しました。",
+    "unblocked": "<@{user_id}> のブロックを解除しました。再びBotを使用できます。",
+    "not_blocked": "<@{user_id}> は現在ブロックされていません。",
+    "cannot_block_bot": "Botアカウントをブロックすることはできません。",
+    "missing_argument": "必須パラメータが不足しています: `{param}`。コマンドを確認してください。",
+    "error_occurred": "エラーが発生しました: {error}"
+  },
+  "callnames": {
+    "name_empty": "名前は空にできません。",
+    "name_too_long": "名前が長すぎます（最大{max_len}文字）。",
+    "approval_error": "現在、呼び名の承認を実行できません: `{error}`",
+    "rejected": "呼び名は承認によって拒否されました。",
+    "saved_user_calls_miku": "保存しました: あなたはミクを `{value}` と呼びます。",
+    "saved_miku_calls_user": "保存しました: ミクはあなたを `{value}` と呼びます。",
+    "profile": "呼び名プロフィール | あなたがミクを呼ぶ名前: `{user_calls_miku}` | ミクがあなたを呼ぶ名前: `{miku_calls_user}`"
+  },
+  "permissions": {
+    "owner_only": "このコマンドはBotオーナーのみ使用できます。",
+    "server_only": "このコマンドはサーバー内でのみ使用できます。",
+    "invalid_user": "無効なユーザーIDまたはメンションです。"
+  },
+  "komifilter": {
+    "injection_blocked": "KomiFilter！システム命令の操作試行（プロンプトインジェクション）を検出しました。直接質問してください。",
+    "leak_blocked": "KomiFilter！システム情報の漏洩リクエストを検出しました。内部ルールを開示することはできません。",
+    "response_blocked": "KomiFilter！システムの機密情報を含むため、応答が自動的にブロックされました。別の方法で質問してみてください。",
+    "default_blocked": "KomiFilter！安全ポリシー違反のため、リクエストがブロックされました。"
+  },
+  "update": {
+    "updating": "gitからBotを更新中...",
+    "already_up_to_date": "Botは既に最新バージョンです。",
+    "restarting": "Botを再起動中...",
+    "restart_failed": "再起動に失敗しました: `{error}`",
+    "update_failed": "更新に失敗しました:\n```\n{error}\n```",
+    "error_occurred": "エラーが発生しました: `{error}`"
+  },
+  "errors": {
+    "generic": "エラーが発生しました: {error}"
+  }
+}

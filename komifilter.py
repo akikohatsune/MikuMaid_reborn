@@ -3,6 +3,8 @@ import unicodedata
 from dataclasses import dataclass
 from typing import Any, Callable
 
+from i18n import t
+
 
 @dataclass(slots=True, frozen=True)
 class KomiFilterDecision:
@@ -18,47 +20,47 @@ class KomiFilter:
         (
             "ignore_previous_instructions",
             re.compile(
-                r"(?:\b|[\W_])(?:ignore|disregard|forget|override|bypass|negate|overwrite|cancel|stop|bỏ qua|quên|xóa|vô hiệu)\b"
-                r".{0,100}\b(?:previous|prior|above|earlier|all|original|system|baseline|trước đó|cũ|ban đầu|hệ thống)\b"
-                r".{0,100}\b(?:instructions?|rules?|system prompt|guardrails?|guidelines?|constraints?|lệnh|quy tắc|hướng dẫn|ràng buộc)\b",
+                r"(?:\b|[\W_])(?:ignore|disregard|forget|override|bypass|negate|overwrite|cancel|stop|bỏ qua|quên|xóa|vô hiệu|無視して|忘れて|上書き|キャンセル)\b"
+                r".{0,100}\b(?:previous|prior|above|earlier|all|original|system|baseline|trước đó|cũ|ban đầu|hệ thống|以前の|元の|システム)\b"
+                r".{0,100}\b(?:instructions?|rules?|system prompt|guardrails?|guidelines?|constraints?|lệnh|quy tắc|hướng dẫn|ràng buộc|指示|ルール|プロンプト|制約)\b",
                 flags=re.IGNORECASE | re.DOTALL,
             ),
         ),
         (
             "act_as_system_or_developer",
             re.compile(
-                r"(?:\b|[\W_])(?:act|behave|pretend|mimic|roleplay|simulate|đóng vai|hành xử|giả vờ|làm)\b"
-                r".{0,60}\b(?:as|like|the role of|như|vai trò)\b"
-                r".{0,60}\b(?:system|developer|admin(?:istrator)?|root|god|kernel|super-user|technical support|hệ thống|lập trình viên|quản trị viên)\b",
+                r"(?:\b|[\W_])(?:act|behave|pretend|mimic|roleplay|simulate|đóng vai|hành xử|giả vờ|làm|演じて|ふりをして|なりきって|シミュレート)\b"
+                r".{0,60}\b(?:as|like|the role of|như|vai trò|として|のように|役割)\b"
+                r".{0,60}\b(?:system|developer|admin(?:istrator)?|root|god|kernel|super-user|technical support|hệ thống|lập trình viên|quản trị viên|システム|開発者|管理者)\b",
                 flags=re.IGNORECASE | re.DOTALL,
             ),
         ),
         (
             "disable_safety",
             re.compile(
-                r"(?:\b|[\W_])(?:disable|turn off|remove|skip|bypass|disable|suspend|deactivate|tắt|vô hiệu hóa|bỏ qua|xóa)\b"
-                r".{0,60}\b(?:safety|policy|guardrails?|filters?|censorship|moderation|protections?|an toàn|bảo vệ|chính sách|kiểm duyệt|bộ lọc)\b",
+                r"(?:\b|[\W_])(?:disable|turn off|remove|skip|bypass|disable|suspend|deactivate|tắt|vô hiệu hóa|bỏ qua|xóa|無効にして|オフにして|解除|停止)\b"
+                r".{0,60}\b(?:safety|policy|guardrails?|filters?|censorship|moderation|protections?|an toàn|bảo vệ|chính sách|kiểm duyệt|bộ lọc|安全|ポリシー|フィルター|検閲|保護)\b",
                 flags=re.IGNORECASE | re.DOTALL,
             ),
         ),
         (
             "role_spoofing_header",
             re.compile(
-                r"^\s*(?:system|developer|assistant|user|admin|hệ thống|lập trình viên)\s*:",
+                r"^\s*(?:system|developer|assistant|user|admin|hệ thống|lập trình viên|システム|開発者|アシスタント)\s*:",
                 flags=re.IGNORECASE | re.MULTILINE,
             ),
         ),
         (
             "jailbreak_mode",
             re.compile(
-                r"\b(?:jailbreak|dan mode|developer mode|aim mode|unfiltered mode|do anything now|broken constraints?|unshackled|free mode|chế độ không giới hạn|chế độ nhà phát triển)\b",
+                r"\b(?:jailbreak|dan mode|developer mode|aim mode|unfiltered mode|do anything now|broken constraints?|unshackled|free mode|chế độ không giới hạn|chế độ nhà phát triển|脱獄|開発者モード|制限なしモード|フリーモード|何でもできるモード)\b",
                 flags=re.IGNORECASE,
             ),
         ),
         (
             "new_conversation_spoof",
             re.compile(
-                r"(?:\b|[\W_])(?:end of conversation|new conversation|start fresh|reboot|initialize|reset session|bắt đầu lại|cuộc trò chuyện mới|xóa lịch sử)\b",
+                r"(?:\b|[\W_])(?:end of conversation|new conversation|start fresh|reboot|initialize|reset session|bắt đầu lại|cuộc trò chuyện mới|xóa lịch sử|会話終了|新しい会話|リセット|セッション初期化|履歴削除)\b",
                 flags=re.IGNORECASE,
             ),
         ),
@@ -85,24 +87,24 @@ class KomiFilter:
         (
             "request_system_prompt",
             re.compile(
-                r"(?:\b|[\W_])(?:show|reveal|print|dump|display|repeat|quote|return|expose|tell me|extract|what is|hiển thị|tiết lộ|in ra|cho tôi xem|đọc)\b"
-                r".{0,120}\b(?:system|developer|hidden|internal|original|initial|base|underlying|hệ thống|ẩn|nội bộ|ban đầu)\b"
-                r".{0,120}\b(?:prompt|instructions?|message|rules?|personality|identity|logic|lệnh|quy tắc|hướng dẫn)\b",
+                r"(?:\b|[\W_])(?:show|reveal|print|dump|display|repeat|quote|return|expose|tell me|extract|what is|hiển thị|tiết lộ|in ra|cho tôi xem|đọc|見せて|表示して|出力して|教えて|抽出)\b"
+                r".{0,120}\b(?:system|developer|hidden|internal|original|initial|base|underlying|hệ thống|ẩn|nội bộ|ban đầu|システム|隠された|内部|元の)\b"
+                r".{0,120}\b(?:prompt|instructions?|message|rules?|personality|identity|logic|lệnh|quy tắc|hướng dẫn|プロンプト|指示|ルール|ロジック)\b",
                 flags=re.IGNORECASE | re.DOTALL,
             ),
         ),
         (
             "request_markdown_source",
             re.compile(
-                r"(?:\b|[\W_])(?:show|reveal|print|dump|display|repeat|quote|return|expose|hiển thị|tiết lộ|in ra|cho tôi xem|đọc)\b"
-                r".{0,100}\b(?:markdown|source|file|text|raw content|mã nguồn|văn bản thô)\b",
+                r"(?:\b|[\W_])(?:show|reveal|print|dump|display|repeat|quote|return|expose|hiển thị|tiết lộ|in ra|cho tôi xem|đọc|見せて|表示して|出力して)\b"
+                r".{0,100}\b(?:markdown|source|file|text|raw content|mã nguồn|văn bản thô|ソースコード|マークダウン|生テキスト)\b",
                 flags=re.IGNORECASE | re.DOTALL,
             ),
         ),
         (
             "rules_file_probe",
             re.compile(
-                r"\b(?:system_rules\.md|rules source|rules markdown|system rules|gemini\.md|luật hệ thống)\b",
+                r"\b(?:system_rules\.md|rules source|rules markdown|system rules|gemini\.md|luật hệ thống|システムルール|ルールファイル)\b",
                 flags=re.IGNORECASE,
             ),
         ),
@@ -123,6 +125,10 @@ class KomiFilter:
         "default to english unless the user explicitly asks",
         # Vietnamese additions
         "bạn là miku",
+        # Japanese additions
+        "あなたはmiku",
+        "システムプロンプト",
+        "内部ルール",
         "quy tắc hệ thống",
         "hướng dẫn nội bộ",
     )
@@ -131,14 +137,14 @@ class KomiFilter:
         (
             "system_prompt_dump",
             re.compile(
-                r"^\s*(?:system|developer|assistant|hệ thống|lập trình viên)\s*(?:prompt|instructions?|quy tắc|lệnh)\s*:",
+                r"^\s*(?:system|developer|assistant|hệ thống|lập trình viên|システム|開発者)\s*(?:prompt|instructions?|quy tắc|lệnh|プロンプト|指示)\s*:",
                 flags=re.IGNORECASE | re.MULTILINE,
             ),
         ),
         (
             "internal_prompt_phrase",
             re.compile(
-                r"(?:\b|[\W_])(?:internal|hidden|developer|baseline|nội bộ|ẩn)\s+(?:prompt|instructions?|logic|rules?|quy tắc|lệnh)\b",
+                r"(?:\b|[\W_])(?:internal|hidden|developer|baseline|nội bộ|ẩn|内部|隠された)\s+(?:prompt|instructions?|logic|rules?|quy tắc|lệnh|プロンプト|指示|ロジック|ルール)\b",
                 flags=re.IGNORECASE,
             ),
         ),
@@ -237,28 +243,18 @@ class KomiFilter:
 
         return KomiFilterDecision(blocked=False)
 
-    def user_block_message(self, decision: KomiFilterDecision) -> str:
-        # Made more modular for future customization
-        messages = {
-            "prompt_injection": (
-                "KomiFilter! Phát hiện nỗ lực thao túng lệnh hệ thống (Prompt Injection). "
-                "Vui lòng đặt câu hỏi trực tiếp và không cố gắng thay đổi hành vi của tôi."
-            ),
-            "prompt_leak_request": (
-                "KomiFilter! Phát hiện yêu cầu rò rỉ thông tin hệ thống. "
-                "Tôi không được phép tiết lộ quy tắc nội bộ."
-            )
+    def user_block_message(self, decision: KomiFilterDecision, locale: str | None = None) -> str:
+        """Return a user-facing block message, localized."""
+        category_to_key = {
+            "prompt_injection": "komifilter.injection_blocked",
+            "prompt_leak_request": "komifilter.leak_blocked",
         }
-        return messages.get(
-            decision.category or "", 
-            "KomiFilter! Yêu cầu của bạn đã bị chặn do vi phạm chính sách an toàn."
-        )
+        key = category_to_key.get(decision.category or "", "komifilter.default_blocked")
+        return t(key, locale)
 
-    def reply_block_message(self) -> str:
-        return (
-            "KomiFilter! Phản hồi bị chặn tự động vì chứa thông tin nhạy cảm của hệ thống. "
-            "Xin lỗi, hãy thử hỏi theo cách khác nhé."
-        )
+    def reply_block_message(self, locale: str | None = None) -> str:
+        """Return a reply-block message, localized."""
+        return t("komifilter.response_blocked", locale)
 
     def _prepare_text(self, text: str) -> str:
         if not text:

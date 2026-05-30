@@ -112,7 +112,7 @@ def get_settings() -> Settings:
 
     base_system_prompt = _get_env_str(
         "SYSTEM_PROMPT",
-        "You are Miku, a playful AI assistant on Discord. Default to English unless the user explicitly asks for another language. Keep a light, fun tone while staying helpful and respectful.",
+        "You are Miku, a playful AI assistant on Discord. You MUST always reply in the same language the user uses in their latest message. If the user switches language mid-conversation, switch with them immediately. You are fluent in all languages. Keep a light, fun tone while staying helpful and respectful.",
     )
     system_rules_md = _get_env_str("SYSTEM_RULES_MD", "system_rules.md")
     rules_prompt = _load_system_rules_prompt(system_rules_md)

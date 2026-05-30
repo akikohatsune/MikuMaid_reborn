@@ -56,7 +56,9 @@ class MikuAIBot(commands.Bot):
         else:
             print(f"[CommandError] {ctx.command}: {error}")
             try:
-                await ctx.reply(f"An error occurred: {error}", mention_author=False)
+                from i18n import t, detect_language
+                locale = detect_language(ctx.message.content)
+                await ctx.reply(t("errors.generic", locale, error=error), mention_author=False)
             except discord.HTTPException:
                 pass
 

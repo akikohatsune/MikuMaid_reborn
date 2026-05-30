@@ -1,0 +1,57 @@
+{
+  "chat": {
+    "banned_message": "You have been banned from the bot and cannot use it.",
+    "terminated_message": "Bot is in terminated mode. Use `{prefix}terminated off` to enable replies again.",
+    "overload": "I'm overloaded!",
+    "no_replay_logs": "No chat replay logs yet.",
+    "replay_header": "Replay logs (newest first):",
+    "replay_usage": "Use `{prefix}replaymiku <id>` to view full details.",
+    "replay_not_found": "Replay id `{record_id}` not found.",
+    "cleared_memory": "Cleared all short-term memory for all users.",
+    "terminated_on": "Terminated mode enabled: bot will stop replying to chat and mentions.",
+    "terminated_off": "Terminated mode disabled: bot can reply normally again.",
+    "terminated_usage": "Usage: `{prefix}terminated on`, `{prefix}terminated off`, or `{prefix}terminated status`.",
+    "terminated_status": "Terminated status: `{status}`",
+    "no_content": "(no content)"
+  },
+  "ban": {
+    "blocked": "Blocked <@{user_id}> from the bot.",
+    "updated_block": "Updated block for <@{user_id}>.",
+    "unblocked": "Unblocked <@{user_id}>. They can use the bot again.",
+    "not_blocked": "<@{user_id}> is not currently blocked.",
+    "cannot_block_bot": "You cannot block a bot account.",
+    "missing_argument": "Missing required argument: `{param}`. Please check your command.",
+    "error_occurred": "An error occurred: {error}"
+  },
+  "callnames": {
+    "name_empty": "Name cannot be empty.",
+    "name_too_long": "Name is too long (max {max_len} characters).",
+    "approval_error": "Unable to run call-name approval right now: `{error}`",
+    "rejected": "Call-name was rejected by approval (`no`).",
+    "saved_user_calls_miku": "Saved: you call Miku `{value}`.",
+    "saved_miku_calls_user": "Saved: Miku will call you `{value}`.",
+    "profile": "Current call profile | You call Miku: `{user_calls_miku}` | Miku calls you: `{miku_calls_user}`"
+  },
+  "permissions": {
+    "owner_only": "Only the bot owner can use this command.",
+    "server_only": "This command can only be used in a server.",
+    "invalid_user": "Invalid user ID or mention."
+  },
+  "komifilter": {
+    "injection_blocked": "KomiFilter! Prompt injection attempt detected. Please ask your question directly without trying to change my behavior.",
+    "leak_blocked": "KomiFilter! System information leak request detected. I cannot reveal internal rules.",
+    "response_blocked": "KomiFilter! Response auto-blocked due to sensitive system info. Sorry, try asking differently.",
+    "default_blocked": "KomiFilter! Your request was blocked due to safety policy violation."
+  },
+  "update": {
+    "updating": "Updating bot from git...",
+    "already_up_to_date": "The bot is already up to date.",
+    "restarting": "Restarting bot...",
+    "restart_failed": "Restart failed: `{error}`",
+    "update_failed": "Update failed:\n```\n{error}\n```",
+    "error_occurred": "An error occurred: `{error}`"
+  },
+  "errors": {
+    "generic": "An error occurred: {error}"
+  }
+}

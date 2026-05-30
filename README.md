@@ -5,67 +5,67 @@
 
 <h1 align="center">MikuMaid_reborn</h1> 
 
-**MikuMaid_reborn** phiên bản tối giản, tập trung hoàn toàn vào hiệu năng với sự hỗ trợ của NVIDIA NIM. Dự án đã được tinh chỉnh để loại bỏ các thành phần dư thừa.
+**MikuMaid_reborn** is a minimalist version, fully focused on performance with the support of NVIDIA NIM. The project has been streamlined to remove redundant components.
 
-## Tính năng
+## Features
 
-- **NVIDIA NIM Integration:** Sử dụng model `google/gemma-3n-e4b-it` (hoặc các model khác hỗ trợ bởi NVIDIA NIM) cho tốc độ phản hồi cực nhanh.
-- **User-Based Memory Isolation:** Mỗi người dùng có một "bộ não" riêng. Lịch sử trò chuyện được cô lập theo `user_id`, không còn tình trạng nhầm lẫn ngữ cảnh giữa những người dùng khác nhau.
-- **KomiFilter 2.0:** Bộ lọc bảo mật nâng cao chống Prompt Injection, Jailbreak và rò rỉ thông tin hệ thống (Prompt Leak).
-- **Visual Env Sync:** Hệ thống đồng bộ hóa file cấu hình trực quan, tự động cập nhật và liệt kê các biến còn thiếu khi khởi động.
-- **Tối giản tối đa:** Đã loại bỏ tất cả các Hooks phức tạp và các Provider khác để tối ưu hóa tài nguyên.
+- **NVIDIA NIM Integration:** Utilizes the `google/gemma-3n-e4b-it` model (or other models supported by NVIDIA NIM) for ultra-fast response times.
+- **User-Based Memory Isolation:** Each user has their own distinct "brain." Chat history is isolated by `user_id`, eliminating context confusion between different users.
+- **KomiFilter 2.0:** An advanced security filter against Prompt Injection, Jailbreak, and system rule leaking (Prompt Leak).
+- **Visual Env Sync:** A visual configuration synchronization system that automatically updates and lists missing variables upon startup.
+- **Maximal Minimalism:** All complex Hooks and other Providers have been removed to optimize resources.
 
-## Cài đặt nhanh
+## Quick Setup
 
 ```bash
-# Tạo môi trường ảo
+# Create a virtual environment
 python -m venv .venv
-# Kích hoạt môi trường (Windows)
+# Activate the environment (Windows)
 .venv\Scripts\activate
-# Cài đặt thư viện
+# Install dependencies
 pip install -r requirements.txt
 ```
 
-## Cấu hình (.env)
+## Configuration (.env)
 
-Hệ thống sẽ tự động tạo file `.env` từ `.env.example` khi bạn chạy bot lần đầu. Bạn chỉ cần điền các thông tin quan trọng:
+The system will automatically generate a `.env` file from `.env.example` when you run the bot for the first time. You just need to fill in the essential information:
 
-- `NVIDIA_API_KEY`: API Key lấy từ NVIDIA API Catalog.
-- `NVIDIA_MODEL`: Model sử dụng (mặc định: `google/gemma-3n-e4b-it`).
-- `DISCORD_TOKEN`: Token của bot Discord.
-- `OWNER_USER_ID`: ID của bạn để sử dụng các lệnh Admin.
+- `NVIDIA_API_KEY`: API Key obtained from the NVIDIA API Catalog.
+- `NVIDIA_MODEL`: The model to use (default: `google/gemma-3n-e4b-it`).
+- `DISCORD_TOKEN`: Your Discord bot token.
+- `OWNER_USER_ID`: Your ID to use Admin commands.
 
-## Lệnh điều khiển
+## Commands
 
 ### Chat & AI
-- **@Bot + Nội dung:** Chat trực tiếp với Miku.
-- **!chat <nội dung>:** Chat bằng lệnh (hỗ trợ đính kèm hình ảnh).
-- **!ask <nội dung>:** Bí danh của lệnh chat.
+- **@Bot + Message:** Chat directly with Miku.
+- **!chat <message>:** Chat using a command (supports image attachments).
+- **!ask <message>:** Alias for the chat command.
 
-### Quản lý (Admin Only)
-- **!clearmemo:** Xóa sạch toàn bộ bộ nhớ ngắn hạn của **tất cả người dùng**.
-- **!ban @user [lý do]:** Cấm người dùng sử dụng bot.
-- **!removeban @user:** Gỡ lệnh cấm.
-- **!replaymiku ls:** Xem danh sách nhật ký chat gần đây.
-- **!replaymiku <id>:** Xem chi tiết nội dung chat theo ID.
+### Management (Admin Only)
+- **!clearmemo:** Clear the entire short-term memory of **all users**.
+- **!ban @user [reason]:** Ban a user from using the bot.
+- **!removeban @user:** Unban a user.
+- **!replaymiku ls:** View a list of recent chat logs.
+- **!replaymiku <id>:** View detailed chat content by ID.
 
-### Khác
-- **!provider:** Xem thông tin về model và cấu hình hệ thống hiện tại.
-- **!terminated on|off:** Bật/tắt chế độ tạm dừng hoạt động của bot.
+### Misc
+- **!provider:** View information about the current model and system configuration.
+- **!terminated on|off:** Enable/disable the bot's paused state.
 
-## Bảo mật (KomiFilter)
+## Security (KomiFilter)
 
-`KomiFilter` bảo vệ bot qua 3 lớp:
-1. **Chặn User Injection:** Ngăn chặn các câu lệnh như "ignore previous instructions".
-2. **Chặn Prompt Leak:** Ngăn người dùng yêu cầu xem mã nguồn hoặc luật hệ thống.
-3. **Chặn Response Leak:** Tự động ẩn các phản hồi từ AI nếu chứa thông tin nhạy cảm của hệ thống.
+`KomiFilter` protects the bot through 3 layers:
+1. **Block User Injection:** Prevents commands like "ignore previous instructions".
+2. **Block Prompt Leak:** Prevents users from requesting source code or system rules.
+3. **Block Response Leak:** Automatically hides AI responses if they contain sensitive system information.
 
-## Lưu trữ
+## Storage
 
-Hệ thống sử dụng SQLite để lưu trữ dữ liệu một cách độc lập:
-- `chat_memory.db`: Lưu lịch sử chat cô lập theo User ID.
-- `ban_control.db`: Lưu danh sách người dùng bị cấm.
-- `callnames.db`: Lưu biệt danh cá nhân hóa.
+The system uses SQLite to store data independently:
+- `chat_memory.db`: Stores chat history isolated by User ID.
+- `ban_control.db`: Stores the list of banned users.
+- `callnames.db`: Stores personalized nicknames.
 
 ---
 **License:** MIT  

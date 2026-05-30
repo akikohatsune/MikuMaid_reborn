@@ -1,7 +1,7 @@
 <p align="center">
   <img src="miku.jpg" alt="MikuMaintaining" width="500">
 </p>
-<p align="center"><span style="color:#8a8f98;">"39! NVIDIA Edition"</span></p>
+<p align="center"><span style="color:#8a8f98;">"39!"</span></p>
 
 <h1 align="center">MikuMaid_reborn</h1> 
 

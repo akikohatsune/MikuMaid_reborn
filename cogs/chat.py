@@ -274,6 +274,22 @@ class AIChatCog(commands.Cog):
         # Auto-detect and persist language from user's message
         locale = await self._update_user_locale(user_id or 0, prompt)
 
+        is_first_time = False
+        if user_id is not None:
+            is_first_time = await self.chat_memory.check_and_mark_first_time(user_id)
+
+        if is_first_time:
+            welcome_msg = t("chat.first_time_greeting", locale)
+            try:
+                if isinstance(target, commands.Context) and target.interaction:
+                    await target.send(welcome_msg, ephemeral=True)
+                else:
+                    author = getattr(target, "author", None)
+                    if author:
+                        await author.send(welcome_msg)
+            except Exception as e:
+                LOGGER.warning("Failed to send first time message to %s: %s", user_id, e)
+
         effective_prompt = self._normalize_prompt(prompt, fallback_prompt)
         prompt_filter = self.komifilter.inspect_user_prompt(effective_prompt)
         if prompt_filter.blocked:

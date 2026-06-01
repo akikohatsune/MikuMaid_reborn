@@ -12,7 +12,8 @@
     "terminated_off": "停止モードが無効になりました：Botは通常通り返信できます。",
     "terminated_usage": "使い方: `{prefix}terminated on`、`{prefix}terminated off`、または `{prefix}terminated status`。",
     "terminated_status": "停止モード状態: `{status}`",
-    "no_content": "（内容なし）"
+    "no_content": "（内容なし）",
+    "first_time_greeting": "Hey, take some minute to check out my website:)\nlink: https://ayanomi.io.vn\nThank you for using Miku (●'◡'●)"
   },
   "ban": {
     "blocked": "<@{user_id}> をBotからブロックしました。",

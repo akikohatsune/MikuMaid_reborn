@@ -12,7 +12,8 @@
     "terminated_off": "Đã tắt chế độ tạm dừng: bot có thể trả lời bình thường.",
     "terminated_usage": "Cách dùng: `{prefix}terminated on`, `{prefix}terminated off`, hoặc `{prefix}terminated status`.",
     "terminated_status": "Trạng thái tạm dừng: `{status}`",
-    "no_content": "(không có nội dung)"
+    "no_content": "(không có nội dung)",
+    "first_time_greeting": "Hey, take some minute to check out my website:)\nlink: https://ayanomi.io.vn\nThank you for using Miku (●'◡'●)"
   },
   "ban": {
     "blocked": "Đã block <@{user_id}> khỏi bot.",

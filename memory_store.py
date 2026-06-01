@@ -78,6 +78,14 @@ class ShortTermMemoryStore:
             """
         )
         await self._conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS first_time_users (
+                user_id INTEGER PRIMARY KEY,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+        )
+        await self._conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_chat_memory_user_id_id ON chat_memory (user_id, id)"
         )
         await self._conn.execute(
@@ -311,6 +319,18 @@ class ShortTermMemoryStore:
             row = await cursor.fetchone()
             await cursor.close()
             return row[0] if row else None
+
+    async def check_and_mark_first_time(self, user_id: int) -> bool:
+        """Check if this is the user's first time interacting, and mark them if so."""
+        async with self._lock:
+            conn = self._require_conn()
+            cursor = await conn.execute(
+                "INSERT OR IGNORE INTO first_time_users (user_id) VALUES (?)",
+                (user_id,),
+            )
+            affected = cursor.rowcount
+            await conn.commit()
+            return affected > 0
 
     async def prune_inactive_users(self, idle_seconds: int) -> None:
         if idle_seconds <= 0:

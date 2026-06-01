@@ -12,7 +12,8 @@
     "terminated_off": "Terminated mode disabled: bot can reply normally again.",
     "terminated_usage": "Usage: `{prefix}terminated on`, `{prefix}terminated off`, or `{prefix}terminated status`.",
     "terminated_status": "Terminated status: `{status}`",
-    "no_content": "(no content)"
+    "no_content": "(no content)",
+    "first_time_greeting": "Hey, take some minute to check out my website:)\nlink: https://ayanomi.io.vn\nThank you for using Miku (●'◡'●)"
   },
   "ban": {
     "blocked": "Blocked <@{user_id}> from the bot.",

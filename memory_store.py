@@ -13,6 +13,8 @@ class ShortTermMemoryStore:
         self.max_messages = max(2, max_history_turns * 2)
         self._conn: aiosqlite.Connection | None = None
         self._lock = asyncio.Lock()
+        self._language_cache: dict[int, str] = {}
+        self._missing_language_users: set[int] = set()
 
     async def initialize(self) -> None:
         path = Path(self.db_path)
@@ -100,6 +102,8 @@ class ShortTermMemoryStore:
         if self._conn is not None:
             await self._conn.close()
             self._conn = None
+        self._language_cache.clear()
+        self._missing_language_users.clear()
 
     async def append_message(
         self,
@@ -295,6 +299,9 @@ class ShortTermMemoryStore:
     async def set_user_language(self, user_id: int, lang_code: str) -> None:
         """Save or update the language preference for a user."""
         async with self._lock:
+            if self._language_cache.get(user_id) == lang_code:
+                return
+
             conn = self._require_conn()
             await conn.execute(
                 """
@@ -307,10 +314,18 @@ class ShortTermMemoryStore:
                 (user_id, lang_code),
             )
             await conn.commit()
+            self._language_cache[user_id] = lang_code
+            self._missing_language_users.discard(user_id)
 
     async def get_user_language(self, user_id: int) -> str | None:
         """Retrieve the stored language preference for a user."""
         async with self._lock:
+            cached = self._language_cache.get(user_id)
+            if cached is not None:
+                return cached
+            if user_id in self._missing_language_users:
+                return None
+
             conn = self._require_conn()
             cursor = await conn.execute(
                 "SELECT lang_code FROM user_language_prefs WHERE user_id = ? LIMIT 1",
@@ -318,7 +333,13 @@ class ShortTermMemoryStore:
             )
             row = await cursor.fetchone()
             await cursor.close()
-            return row[0] if row else None
+            if row is None:
+                self._missing_language_users.add(user_id)
+                return None
+
+            lang_code = str(row[0])
+            self._language_cache[user_id] = lang_code
+            return lang_code
 
     async def check_and_mark_first_time(self, user_id: int) -> bool:
         """Check if this is the user's first time interacting, and mark them if so."""

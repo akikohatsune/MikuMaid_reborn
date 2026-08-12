@@ -12,42 +12,18 @@ from typing import Any
 
 LOGGER = logging.getLogger(__name__)
 
-# ---------------------------------------------------------------------------
-# Language detection — uses `langdetect` if installed, falls back to heuristics
-# ---------------------------------------------------------------------------
-_LANGDETECT_AVAILABLE = False
-try:
-    from langdetect import detect as _ld_detect
-    from langdetect import LangDetectException
-    _LANGDETECT_AVAILABLE = True
-except ImportError:
-    pass
-
-
 # Supported UI locales (bot system messages).
 # LLM responses are NOT limited to these — the LLM can reply in any language.
 SUPPORTED_LOCALES: tuple[str, ...] = ("en", "vi", "ja")
 DEFAULT_LOCALE = "en"
 
-# Map langdetect codes to our supported locales
-_LANG_CODE_MAP: dict[str, str] = {
-    "en": "en",
-    "vi": "vi",
-    "ja": "ja",
-    # Common langdetect outputs that map to our supported locales
-    "zh-cn": "en",  # Chinese → fallback to English
-    "zh-tw": "en",
-    "ko": "en",     # Korean → fallback to English
-    "fr": "en",
-    "de": "en",
-    "es": "en",
-    "pt": "en",
-    "ru": "en",
-    "th": "en",
-    "id": "en",     # Indonesian
-    "ms": "en",     # Malay
-    "tl": "en",     # Tagalog
-}
+# The UI only has English, Vietnamese, and Japanese translations. A small
+# character-based detector is enough here and avoids putting the synchronous,
+# comparatively expensive `langdetect` package on every chat request.
+_VI_CHARS = frozenset(
+    "àáảãạăắằẳẵặâấầẩẫậèéẻẽẹêếềểễệìíỉĩị"
+    "òóỏõọôốồổỗộơớờởỡợùúủũụưứừửữựỳýỷỹỵđ"
+)
 
 
 def detect_language(text: str) -> str:
@@ -59,39 +35,24 @@ def detect_language(text: str) -> str:
     if not text or len(text.strip()) < 5:
         return DEFAULT_LOCALE
 
-    # Try langdetect first
-    if _LANGDETECT_AVAILABLE:
-        try:
-            detected = _ld_detect(text)
-            mapped = _LANG_CODE_MAP.get(detected, DEFAULT_LOCALE)
-            return mapped if mapped in SUPPORTED_LOCALES else DEFAULT_LOCALE
-        except LangDetectException:
-            pass
-
-    # Heuristic fallback — check for Vietnamese and Japanese characters
     return _heuristic_detect(text)
 
 
 def _heuristic_detect(text: str) -> str:
     """Simple heuristic language detection based on character ranges."""
-    vi_chars = set("àáảãạăắằẳẵặâấầẩẫậèéẻẽẹêếềểễệìíỉĩịòóỏõọôốồổỗộơớờởỡợùúủũụưứừửữựỳýỷỹỵđ")
-    jp_ranges = [
-        (0x3040, 0x309F),  # Hiragana
-        (0x30A0, 0x30FF),  # Katakana
-        (0x4E00, 0x9FFF),  # CJK Unified (shared with Chinese, but combined with kana → Japanese)
-    ]
-
     vi_count = 0
     jp_count = 0
 
-    for ch in text.lower():
-        if ch in vi_chars:
+    for ch in text.casefold():
+        if ch in _VI_CHARS:
             vi_count += 1
         code = ord(ch)
-        for start, end in jp_ranges:
-            if start <= code <= end:
-                jp_count += 1
-                break
+        if (
+            0x3040 <= code <= 0x309F  # Hiragana
+            or 0x30A0 <= code <= 0x30FF  # Katakana
+            or 0x4E00 <= code <= 0x9FFF  # CJK Unified
+        ):
+            jp_count += 1
 
     total = len(text)
     if total == 0:
@@ -179,17 +140,13 @@ class I18n:
         return sorted(self._translations.keys())
 
 
-# ---------------------------------------------------------------------------
-# Global singleton — initialized once, importable anywhere
-# ---------------------------------------------------------------------------
-_i18n_instance: I18n | None = None
+# Load the tiny locale bundle while the bot imports its cogs. This keeps file
+# I/O out of the first user interaction without changing per-message memory use.
+_i18n_instance = I18n()
 
 
 def get_i18n() -> I18n:
-    """Get or create the global I18n instance."""
-    global _i18n_instance
-    if _i18n_instance is None:
-        _i18n_instance = I18n()
+    """Return the shared I18n instance initialized at bot startup."""
     return _i18n_instance
 
 

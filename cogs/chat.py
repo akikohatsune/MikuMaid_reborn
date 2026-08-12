@@ -156,7 +156,6 @@ class AIChatCog(commands.Cog):
             normalized_prompt,
             guild_id=guild_id,
             user_id=user_id,
-            locale=locale,
         )
         image_inputs = images or []
         history = await self._load_history_messages(user_id)
@@ -196,13 +195,8 @@ class AIChatCog(commands.Cog):
         prompt: str,
         guild_id: int | None,
         user_id: int | None,
-        locale: str | None = None,
     ) -> str:
         parts: list[str] = []
-
-        # Inject language preference so the LLM knows which language to use
-        if locale:
-            parts.append(f"[language_preference] user prefers: {locale}")
 
         if guild_id is not None and user_id is not None:
             user_calls_miku, miku_calls_user = await self.callnames_store.get_user_call_preferences(

@@ -47,8 +47,6 @@
   "update": {
     "updating": "Updating bot from git...",
     "already_up_to_date": "The bot is already up to date.",
-    "restarting": "Restarting bot...",
-    "restart_failed": "Restart failed: `{error}`",
     "update_failed": "Update failed:\n```\n{error}\n```",
     "error_occurred": "An error occurred: `{error}`"
   },

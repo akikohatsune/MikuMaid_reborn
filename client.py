@@ -51,7 +51,14 @@ class LLMClient:
         chat_completion = await self.nvidia_client.chat.completions.create(
             model=self.settings.nvidia_model,
             messages=self._build_openai_style_messages(messages),
+            max_tokens=self.settings.nvidia_max_tokens,
             temperature=self.settings.temperature,
+            top_p=self.settings.nvidia_top_p,
+            extra_body={
+                "chat_template_kwargs": {
+                    "enable_thinking": self.settings.nvidia_enable_thinking,
+                }
+            },
         )
         message = chat_completion.choices[0].message
         content = message.content

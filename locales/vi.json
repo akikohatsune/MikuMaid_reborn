@@ -47,8 +47,6 @@
   "update": {
     "updating": "Đang cập nhật bot từ git...",
     "already_up_to_date": "Bot đã ở phiên bản mới nhất.",
-    "restarting": "Đang khởi động lại bot...",
-    "restart_failed": "Khởi động lại thất bại: `{error}`",
     "update_failed": "Cập nhật thất bại:\n```\n{error}\n```",
     "error_occurred": "Đã xảy ra lỗi: `{error}`"
   },

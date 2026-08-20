@@ -47,8 +47,6 @@
   "update": {
     "updating": "gitからBotを更新中...",
     "already_up_to_date": "Botは既に最新バージョンです。",
-    "restarting": "Botを再起動中...",
-    "restart_failed": "再起動に失敗しました: `{error}`",
     "update_failed": "更新に失敗しました:\n```\n{error}\n```",
     "error_occurred": "エラーが発生しました: `{error}`"
   },

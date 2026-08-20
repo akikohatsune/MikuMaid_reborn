@@ -12,6 +12,13 @@ from utils import auto_merge_dotenv
 
 class MikuAIBot(commands.Bot):
     def __init__(self, settings: Settings):
+        if not hasattr(discord, "Intents"):
+            module_path = getattr(discord, "__file__", "unknown location")
+            raise RuntimeError(
+                "The imported 'discord' module is not discord.py 2.x "
+                f"(loaded from {module_path}). Remove conflicting Discord packages "
+                "and reinstall requirements.txt with this Python interpreter."
+            )
         intents = discord.Intents.default()
         intents.message_content = True
 
@@ -46,7 +53,7 @@ class MikuAIBot(commands.Bot):
         elif self.owner_ids:
             print(f"Owner IDs: {list(self.owner_ids)}")
         
-        print(f"Provider: {self.settings.provider}")
+        print("Provider: NVIDIA NIM")
         print(f"Model: {self._active_chat_model()}")
         print("---")
 
@@ -63,22 +70,15 @@ class MikuAIBot(commands.Bot):
                 pass
 
     def _active_chat_model(self) -> str:
-        if self.settings.provider == "gemini":
-            return self.settings.gemini_model
-        if self.settings.provider == "groq":
-            return self.settings.groq_model
-        if self.settings.provider == "openai":
-            return self.settings.openai_model
-        if self.settings.provider == "local":
-            return self.settings.local_model
-        return "unknown"
+        return self.settings.nvidia_model
 
 
 async def main() -> None:
     auto_merge_dotenv()
     settings = get_settings()
     bot = MikuAIBot(settings)
-    await bot.start(settings.discord_token)
+    async with bot:
+        await bot.start(settings.discord_token)
 
 
 if __name__ == "__main__":

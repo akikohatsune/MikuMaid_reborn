@@ -23,6 +23,9 @@ class Settings:
     rpc_activity_url: str | None
     nvidia_api_key: str
     nvidia_model: str
+    nvidia_enable_thinking: bool
+    nvidia_max_tokens: int
+    nvidia_top_p: float
     system_prompt: str
     system_rules_md: str
     chat_replay_log_path: str
@@ -38,7 +41,6 @@ class Settings:
     komifilter_max_check_chars: int
     komifilter_block_response_on_leak: bool
     owner_id: int | None
-    restart_interval_hours: int
 
 
 def _get_env_str(name: str, default: str) -> str:
@@ -130,7 +132,7 @@ def get_settings() -> Settings:
         f"{base_system_prompt}\n\n{rules_prompt}" if rules_prompt else base_system_prompt
     )
     legacy_memory_db_path = _get_env_str("MEMORY_DB_PATH", "chat_memory.db")
-    nvidia_model = _get_env_str("NVIDIA_MODEL", "google/gemma-3n-e4b-it")
+    nvidia_model = _get_env_str("NVIDIA_MODEL", "google/gemma-4-31b-it")
     
     rpc_enabled = _get_env_bool("RPC_ENABLED", True)
     rpc_status = _get_env_str("RPC_STATUS", "online").lower()
@@ -161,8 +163,6 @@ def get_settings() -> Settings:
 
     owner_id_raw = os.getenv("OWNER_USER_ID", "").strip()
     owner_id = int(owner_id_raw) if owner_id_raw.isdigit() else None
-    restart_interval_hours = _get_env_int("RESTART_INTERVAL_HOURS", 12, minimum=0)
-
     return Settings(
         discord_token=discord_token,
         command_prefix=_get_env_str("COMMAND_PREFIX", "!"),
@@ -173,6 +173,9 @@ def get_settings() -> Settings:
         rpc_activity_url=rpc_activity_url,
         nvidia_api_key=nvidia_api_key,
         nvidia_model=nvidia_model,
+        nvidia_enable_thinking=_get_env_bool("NVIDIA_ENABLE_THINKING", True),
+        nvidia_max_tokens=_get_env_int("NVIDIA_MAX_TOKENS", 16384, minimum=1),
+        nvidia_top_p=_get_env_float("NVIDIA_TOP_P", 0.95),
         system_prompt=full_system_prompt,
         system_rules_md=system_rules_md,
         chat_replay_log_path=_get_env_str(
@@ -201,5 +204,4 @@ def get_settings() -> Settings:
             True,
         ),
         owner_id=owner_id,
-        restart_interval_hours=restart_interval_hours,
     )

@@ -31,7 +31,10 @@ pip install -r requirements.txt
 The system will automatically generate a `.env` file from `.env.example` when you run the bot for the first time. You just need to fill in the essential information:
 
 - `NVIDIA_API_KEY`: API Key obtained from the NVIDIA API Catalog.
-- `NVIDIA_MODEL`: The model to use (default: `google/gemma-3n-e4b-it`).
+- `NVIDIA_MODEL`: The model to use (default: `google/gemma-4-31b-it`).
+- `NVIDIA_ENABLE_THINKING`: Passes the model's thinking-mode flag (default: `true`).
+- `NVIDIA_MAX_TOKENS`: Maximum generated-token budget (default: `16384`).
+- `NVIDIA_TOP_P`: Nucleus-sampling threshold (default: `0.95`).
 - `DISCORD_TOKEN`: Your Discord bot token.
 - `OWNER_USER_ID`: Your ID to use Admin commands.
 

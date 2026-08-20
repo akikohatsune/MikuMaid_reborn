@@ -519,6 +519,11 @@ class AIChatCog(commands.Cog):
         prompt: str | None = None,
     ) -> None:
         """Chat with the AI bot."""
+        # Slash commands must be acknowledged before database and model work.
+        # Context.send/reply will automatically use followups after this defer.
+        if ctx.interaction is not None:
+            await ctx.defer()
+
         locale = await self._get_locale(ctx.author.id, ctx.message.content)
 
         if await self._is_banned_user(

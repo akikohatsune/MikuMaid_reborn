@@ -26,6 +26,8 @@ class Settings:
     nvidia_enable_thinking: bool
     nvidia_max_tokens: int
     nvidia_top_p: float
+    nvidia_timeout_seconds: float
+    nvidia_max_retries: int
     system_prompt: str
     system_rules_md: str
     chat_replay_log_path: str
@@ -173,9 +175,14 @@ def get_settings() -> Settings:
         rpc_activity_url=rpc_activity_url,
         nvidia_api_key=nvidia_api_key,
         nvidia_model=nvidia_model,
-        nvidia_enable_thinking=_get_env_bool("NVIDIA_ENABLE_THINKING", True),
-        nvidia_max_tokens=_get_env_int("NVIDIA_MAX_TOKENS", 16384, minimum=1),
+        nvidia_enable_thinking=_get_env_bool("NVIDIA_ENABLE_THINKING", False),
+        nvidia_max_tokens=_get_env_int("NVIDIA_MAX_TOKENS", 1024, minimum=1),
         nvidia_top_p=_get_env_float("NVIDIA_TOP_P", 0.95),
+        nvidia_timeout_seconds=max(
+            1.0,
+            _get_env_float("NVIDIA_TIMEOUT_SECONDS", 60.0),
+        ),
+        nvidia_max_retries=_get_env_int("NVIDIA_MAX_RETRIES", 1, minimum=0),
         system_prompt=full_system_prompt,
         system_rules_md=system_rules_md,
         chat_replay_log_path=_get_env_str(

@@ -30,7 +30,9 @@ class LLMClient:
         self.nvidia_client = (
             AsyncOpenAI(
                 api_key=settings.nvidia_api_key,
-                base_url="https://integrate.api.nvidia.com/v1"
+                base_url="https://integrate.api.nvidia.com/v1",
+                timeout=settings.nvidia_timeout_seconds,
+                max_retries=settings.nvidia_max_retries,
             )
             if settings.nvidia_api_key and AsyncOpenAI is not None
             else None
@@ -87,11 +89,8 @@ class LLMClient:
                 for image in images:
                     data_url = f"data:{image['mime_type']};base64,{image['data_b64']}"
                     parts.append({
-                        "type": "image_url", 
-                        "image_url": {
-                            "url": data_url,
-                            "detail": "high"
-                        }
+                        "type": "image_url",
+                        "image_url": {"url": data_url},
                     })
                 openai_messages.append({"role": msg["role"], "content": parts})
             elif text:

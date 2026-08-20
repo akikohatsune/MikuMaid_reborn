@@ -32,9 +32,11 @@ The system will automatically generate a `.env` file from `.env.example` when yo
 
 - `NVIDIA_API_KEY`: API Key obtained from the NVIDIA API Catalog.
 - `NVIDIA_MODEL`: The model to use (default: `google/gemma-4-31b-it`).
-- `NVIDIA_ENABLE_THINKING`: Passes the model's thinking-mode flag (default: `true`).
-- `NVIDIA_MAX_TOKENS`: Maximum generated-token budget (default: `16384`).
+- `NVIDIA_ENABLE_THINKING`: Passes the model's thinking-mode flag (default: `false` for lower latency).
+- `NVIDIA_MAX_TOKENS`: Maximum generated-token budget (default: `1024`).
 - `NVIDIA_TOP_P`: Nucleus-sampling threshold (default: `0.95`).
+- `NVIDIA_TIMEOUT_SECONDS`: Per-request timeout in seconds (default: `60`).
+- `NVIDIA_MAX_RETRIES`: Retry count for transient provider failures (default: `1`).
 - `DISCORD_TOKEN`: Your Discord bot token.
 - `OWNER_USER_ID`: Your ID to use Admin commands.
 

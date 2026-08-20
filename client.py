@@ -6,9 +6,18 @@ import inspect
 from typing import Any, Awaitable, Callable, TypedDict, cast
 
 try:
+    from openai import APIConnectionError, APITimeoutError
     from openai import AsyncOpenAI
+    from openai import InternalServerError, RateLimitError
+    OPENAI_PROVIDER_ERRORS = (
+        APIConnectionError,
+        APITimeoutError,
+        InternalServerError,
+        RateLimitError,
+    )
 except ImportError:  # pragma: no cover - optional dependency at runtime
     AsyncOpenAI = None  # type: ignore[assignment]
+    OPENAI_PROVIDER_ERRORS = ()
 
 from config import Settings
 
@@ -22,6 +31,10 @@ class ChatMessage(TypedDict, total=False):
     role: str
     content: str
     images: list[ImageInput]
+
+
+class ProviderUnavailableError(RuntimeError):
+    """The configured inference provider could not complete the request."""
 
 
 class LLMClient:
@@ -50,18 +63,39 @@ class LLMClient:
         if self.nvidia_client is None:
             raise RuntimeError("Missing NVIDIA_API_KEY")
 
-        chat_completion = await self.nvidia_client.chat.completions.create(
-            model=self.settings.nvidia_model,
-            messages=self._build_openai_style_messages(messages),
-            max_tokens=self.settings.nvidia_max_tokens,
-            temperature=self.settings.temperature,
-            top_p=self.settings.nvidia_top_p,
-            extra_body={
+        request: dict[str, Any] = {
+            "model": self.settings.nvidia_model,
+            "messages": self._build_openai_style_messages(messages),
+            "max_tokens": self.settings.nvidia_max_tokens,
+            "temperature": self.settings.temperature,
+            "top_p": self.settings.nvidia_top_p,
+        }
+        if self.settings.nvidia_enable_thinking:
+            request["extra_body"] = {
                 "chat_template_kwargs": {
-                    "enable_thinking": self.settings.nvidia_enable_thinking,
+                    "enable_thinking": True,
                 }
-            },
-        )
+            }
+
+        try:
+            chat_completion = await self.nvidia_client.chat.completions.create(
+                **request,
+            )
+        except Exception as exc:
+            if not isinstance(exc, OPENAI_PROVIDER_ERRORS):
+                raise
+            status_code = getattr(exc, "status_code", None)
+            request_id = getattr(exc, "request_id", None)
+            details = []
+            if status_code is not None:
+                details.append(f"HTTP {status_code}")
+            if request_id:
+                details.append(f"request_id={request_id}")
+            suffix = f" ({', '.join(details)})" if details else ""
+            raise ProviderUnavailableError(
+                f"NVIDIA NIM could not complete the inference request{suffix}."
+            ) from None
+
         message = chat_completion.choices[0].message
         content = message.content
         if isinstance(content, str) and content.strip():

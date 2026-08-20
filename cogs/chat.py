@@ -11,7 +11,7 @@ import discord
 from discord.ext import commands, tasks
 
 from config import Settings
-from client import ChatMessage, ImageInput, LLMClient
+from client import ChatMessage, ImageInput, LLMClient, ProviderUnavailableError
 from komifilter import KomiFilter
 from logger.chat_logger import ChatReplayLogger
 from memory_store import ShortTermMemoryStore
@@ -422,7 +422,10 @@ class AIChatCog(commands.Cog):
         exc: Exception,
         locale: str | None = None,
     ) -> None:
-        LOGGER.exception("AI reply failed: %s", exc)
+        if isinstance(exc, ProviderUnavailableError):
+            LOGGER.warning("AI provider unavailable: %s", exc)
+        else:
+            LOGGER.exception("AI reply failed: %s", exc)
         message = t("chat.overload", locale)
         if isinstance(target, commands.Context):
             await target.reply(message, mention_author=False)

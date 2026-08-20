@@ -36,7 +36,7 @@ The system will automatically generate a `.env` file from `.env.example` when yo
 - `NVIDIA_MAX_TOKENS`: Maximum generated-token budget (default: `1024`).
 - `NVIDIA_TOP_P`: Nucleus-sampling threshold (default: `0.95`).
 - `NVIDIA_TIMEOUT_SECONDS`: Per-request timeout in seconds (default: `60`).
-- `NVIDIA_MAX_RETRIES`: Retry count for transient provider failures (default: `1`).
+- `NVIDIA_MAX_RETRIES`: Retry count for transient provider failures (default: `0` for fast failure).
 - `DISCORD_TOKEN`: Your Discord bot token.
 - `OWNER_USER_ID`: Your ID to use Admin commands.
 

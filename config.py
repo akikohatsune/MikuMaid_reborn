@@ -182,7 +182,7 @@ def get_settings() -> Settings:
             1.0,
             _get_env_float("NVIDIA_TIMEOUT_SECONDS", 60.0),
         ),
-        nvidia_max_retries=_get_env_int("NVIDIA_MAX_RETRIES", 1, minimum=0),
+        nvidia_max_retries=_get_env_int("NVIDIA_MAX_RETRIES", 0, minimum=0),
         system_prompt=full_system_prompt,
         system_rules_md=system_rules_md,
         chat_replay_log_path=_get_env_str(

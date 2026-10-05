@@ -51,6 +51,7 @@ class AIChatCog(commands.Cog):
             enabled=settings.komifilter_enabled,
             max_check_chars=settings.komifilter_max_check_chars,
             block_response_on_leak=settings.komifilter_block_response_on_leak,
+            system_prompt=settings.system_prompt,
         )
         self.is_terminated = False
         self.deleted_message_ids: set[int] = set()
@@ -285,7 +286,11 @@ class AIChatCog(commands.Cog):
                 LOGGER.warning("Failed to send first time message to %s: %s", user_id, e)
 
         effective_prompt = self._normalize_prompt(prompt, fallback_prompt)
-        prompt_filter = self.komifilter.inspect_user_prompt(effective_prompt)
+        recent_history = await self._load_history_messages(user_id)
+        prompt_filter = self.komifilter.inspect_user_prompt(
+            effective_prompt,
+            history=recent_history,
+        )
         if prompt_filter.blocked:
             block_reply = self.komifilter.user_block_message(prompt_filter, locale=locale)
             LOGGER.warning(

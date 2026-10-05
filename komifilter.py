@@ -1,11 +1,30 @@
+from __future__ import annotations
+
 import base64
-import binascii
+import html
 import re
 import unicodedata
+import urllib.parse
 from dataclasses import dataclass
 from typing import Any, Callable
 
 from i18n import t
+
+# Homoglyph substitution map (Cyrillic, Greek, lookalikes to ASCII Latin)
+HOMOGLYPH_MAP: dict[int, str] = str.maketrans({
+    # Cyrillic small
+    "\u0430": "a", "\u0435": "e", "\u043e": "o", "\u0440": "p", "\u0441": "c",
+    "\u0443": "y", "\u0445": "x", "\u0456": "i", "\u0458": "j", "\u0455": "s",
+    "\u0432": "b", "\u043d": "h", "\u043c": "m", "\u0442": "t",
+    # Cyrillic capital
+    "\u0410": "A", "\u0412": "B", "\u0415": "E", "\u041a": "K", "\u041c": "M",
+    "\u041d": "H", "\u041e": "O", "\u0420": "P", "\u0421": "C", "\u0422": "T",
+    "\u0425": "X",
+    # Greek
+    "\u03b1": "a", "\u03b2": "b", "\u03b5": "e", "\u03b9": "i", "\u03ba": "k",
+    "\u03bd": "v", "\u03bf": "o", "\u03c1": "p", "\u03c4": "t", "\u03c5": "u",
+    "\u03c7": "x",
+})
 
 
 @dataclass(slots=True, frozen=True)
@@ -17,7 +36,14 @@ class KomiFilterDecision:
 
 
 class KomiFilter:
-    # --- Advanced Prompt Injection Patterns ---
+    """
+    KomiFilter 3.0 - Multi-layered Security Filter for MikuMaid.
+    - Layer 1: Enhanced Multi-Stage Decoding, Homoglyphs & Rule Matching.
+    - Layer 2: Context-Aware & Multi-Turn Sliding Window (Payload Splitting Defense).
+    - Layer 3: Semantic & Fuzzy Output Leak Detection (N-gram & Overlap against System Rules).
+    """
+
+    # --- Layer 1: Prompt Injection Patterns ---
     USER_INJECTION_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
         (
             "ignore_previous_instructions",
@@ -104,14 +130,17 @@ class KomiFilter:
         ),
     )
 
-    # --- Prompt Leak Prevention Patterns ---
+    # --- Layer 1: Prompt Leak Prevention Patterns ---
     USER_PROMPT_LEAK_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
         (
             "request_system_prompt",
             re.compile(
-                r"(?:\b|[\W_])(?:show|reveal|print|dump|display|repeat|quote|return|expose|tell me|extract|what is|hiển thị|hien thi|tiết lộ|tiet lo|in ra|cho tôi xem|cho toi xem|đọc|doc|cho biết|cho biet|见せて|表示して|出力して|教えて|抽出)\b"
-                r".{0,120}\b(?:system|developer|hidden|internal|original|initial|base|underlying|raw|hệ thống|he thong|ẩn|an|nội bộ|noi bo|ban đầu|ban dau|gốc|goc|システム|隠された|内部|元の)\b"
-                r".{0,120}\b(?:prompt|instructions?|message|rules?|personality|identity|logic|guidelines|lệnh|lenh|quy tắc|quy tac|hướng dẫn|huong dan|chỉ thị|chi thi|プロンプト|指示|ルール|ロジック)\b",
+                r"(?:\b|[\W_])(?:show|reveal|print|dump|display|repeat|quote|return|expose|tell me|extract|hiển thị|hien thi|tiết lộ|tiet lo|in ra|cho tôi xem|cho toi xem|đọc|doc|cho biết|cho biet|见せて|表示して|出力して|教えて|抽出|"
+                r"what\s+is\s+(?:your|this\s+bot'?s?|the\s+bot'?s?|the\s+system|the\s+internal|the\s+hidden|the\s+original))\b"
+                r".{0,120}\b(?:system\s+(?:prompt|rules?|instructions?|guidelines?)|developer\s+instructions?|hidden\s+rules?|internal\s+prompt|"
+                r"quy\s+tắc\s+hệ\s+thống|quy\s+tac\s+he\s+thong|luật\s+hệ\s+thống|luat\s+he\s+thong|prompt\s+hệ\s+thống|prompt\s+he\s+thong|hướng\s+dẫn\s+hệ\s+thống|huong\s+dan\s+he\s+thong|"
+                r"(?:(?:system|developer|hidden|internal|original|initial|base|underlying|raw|hệ thống|he thong|ẩn|an|nội bộ|noi bo|ban đầu|ban dau|gốc|goc|システム|隠された|内部|元の).{0,60}(?:prompt|instructions?|message|rules?|personality|identity|logic|guidelines|lệnh|lenh|quy tắc|quy tac|hướng dẫn|huong dan|chỉ thị|chi thi|プロンプト|指示|ルール|ロジック))|"
+                r"(?:(?:prompt|instructions?|message|rules?|personality|identity|logic|guidelines|lệnh|lenh|quy tắc|quy tac|hướng dẫn|huong dan|chỉ thị|chi thi|プロンプト|指示|ルール|ロジック).{0,60}(?:system|developer|hidden|internal|original|initial|base|underlying|raw|hệ thống|he thong|ẩn|an|nội bộ|noi bo|ban đầu|ban dau|gốc|goc|システム|隠された|内部|元の)))\b",
                 flags=re.IGNORECASE | re.DOTALL,
             ),
         ),
@@ -147,7 +176,7 @@ class KomiFilter:
         ),
     )
 
-    # --- Strong Model Leak Markers (Filtered from Model Response) ---
+    # --- Layer 3: Strong Model Leak Markers (Exact Substring Filter) ---
     REPLY_STRONG_LEAK_MARKERS: tuple[str, ...] = (
         "you must follow these extra system rules loaded from markdown",
         "rules source:",
@@ -173,12 +202,22 @@ class KomiFilter:
         "内部ルール",
     )
 
+    # --- Layer 3: Model Structural / Prefacing Leak Patterns ---
     REPLY_LEAK_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
         (
-            "system_prompt_dump",
+            "system_prompt_dump_header",
             re.compile(
                 r"^\s*(?:system|developer|assistant|hệ thống|lập trình viên|システム|開発者)\s*(?:prompt|instructions?|quy tắc|lệnh|プロンプト|指示)\s*:",
                 flags=re.IGNORECASE | re.MULTILINE,
+            ),
+        ),
+        (
+            "prefacing_leak_statement",
+            re.compile(
+                r"(?:\b|[\W_])(?:here (?:are|is) the|below are the|my (?:internal|developer|system))\s+(?:instructions?|rules?|guidelines?|prompt|system prompt)\b|"
+                r"(?:\b|[\W_])(?:dưới đây là|sau đây là|các)\s+(?:hướng dẫn|quy tắc|chỉ thị|prompt)\s+(?:hệ thống|nội bộ|của lập trình viên)\b|"
+                r"(?:以下は|これが|開発者から与えられた)\s*(?:システムプロンプト|内部ルール|指示|設定)\b",
+                flags=re.IGNORECASE,
             ),
         ),
         (
@@ -196,90 +235,69 @@ class KomiFilter:
         enabled: bool,
         max_check_chars: int,
         block_response_on_leak: bool,
+        system_prompt: str | None = None,
         logger_callback: Callable[[KomiFilterDecision, str], None] | None = None,
     ) -> None:
         self.enabled = enabled
         self.max_check_chars = max(256, max_check_chars)
         self.block_response_on_leak = block_response_on_leak
+        self.system_prompt = system_prompt
+        self.reference_clauses = self._extract_reference_clauses(system_prompt) if system_prompt else []
         self.logger_callback = logger_callback
 
-    def inspect_user_prompt(self, text: str) -> KomiFilterDecision:
+    def inspect_user_prompt(
+        self,
+        text: str,
+        history: list[dict[str, Any]] | list[Any] | None = None,
+    ) -> KomiFilterDecision:
+        """
+        Layer 1 & Layer 2: Inspect user prompt and multi-turn conversation context.
+        """
         if not self.enabled:
             return KomiFilterDecision(blocked=False)
-        
-        # Fast path for empty or very short strings
+
+        # Fast path for empty or trivial strings
         if not text or len(text.strip()) < 3:
             return KomiFilterDecision(blocked=False)
-            
-        sample = self._prepare_text(text)
+
+        sample = self._normalize_text(text)
         if not sample:
             return KomiFilterDecision(blocked=False)
 
-        # Build candidate inspection variants (raw normalized, despaced, unaccented, decoded b64)
-        candidates: list[str] = [sample]
-        despaced = self._despace_text(sample)
-        if despaced and despaced != sample:
-            candidates.append(despaced)
+        # LAYER 1: Inspect current user message (with multi-encoding variants)
+        decision = self._inspect_single_payload(sample, original_text=text)
+        if decision.blocked:
+            return decision
 
-        unaccented = self._strip_accents(sample)
-        if unaccented and unaccented != sample:
-            candidates.append(unaccented)
-
-        if despaced:
-            despaced_unaccented = self._strip_accents(despaced)
-            if despaced_unaccented and despaced_unaccented not in candidates:
-                candidates.append(despaced_unaccented)
-
-        b64_payloads = self._extract_and_decode_base64(sample)
-        if b64_payloads:
-            for payload in b64_payloads:
-                candidates.append(payload)
-                payload_unaccented = self._strip_accents(payload)
-                if payload_unaccented != payload:
-                    candidates.append(payload_unaccented)
-
-        for candidate in candidates:
-            # 1. Check for prompt injection
-            injection_hits = self._collect_matches(candidate, self.USER_INJECTION_PATTERNS)
-            if injection_hits:
-                decision = KomiFilterDecision(
-                    blocked=True,
-                    category="prompt_injection",
-                    reason="suspicious instruction override attempt",
-                    matches=injection_hits,
-                )
-                self._log(decision, text)
-                return decision
-
-            # 2. Check for prompt leak requests
-            leak_hits = self._collect_matches(candidate, self.USER_PROMPT_LEAK_PATTERNS)
-            if leak_hits:
-                decision = KomiFilterDecision(
-                    blocked=True,
-                    category="prompt_leak_request",
-                    reason="suspicious system prompt discovery attempt",
-                    matches=leak_hits,
-                )
-                self._log(decision, text)
-                return decision
+        # LAYER 2: Context-Aware / Multi-turn sliding window inspection
+        if history:
+            multi_turn_decision = self._inspect_multi_turn_history(sample, history, original_text=text)
+            if multi_turn_decision.blocked:
+                return multi_turn_decision
 
         return KomiFilterDecision(blocked=False)
 
-    def inspect_model_reply(self, text: str) -> KomiFilterDecision:
+    def inspect_model_reply(
+        self,
+        text: str,
+        system_prompt: str | None = None,
+    ) -> KomiFilterDecision:
+        """
+        Layer 3: Inspect model output for literal, structural, and semantic/approximate leaks.
+        """
         if not self.enabled or not self.block_response_on_leak:
             return KomiFilterDecision(blocked=False)
-            
-        # Fast path
+
         if not text:
             return KomiFilterDecision(blocked=False)
-        
-        sample = self._prepare_text(text)
+
+        sample = self._normalize_text(text)
         if not sample:
             return KomiFilterDecision(blocked=False)
 
         lowered = sample.lower()
-        
-        # 1. Search for literal markers of the system prompt or internal state (Fast substring check)
+
+        # 1. Fast substring check for literal known markers
         strong_hits = tuple(
             marker for marker in self.REPLY_STRONG_LEAK_MARKERS if marker in lowered
         )
@@ -293,14 +311,31 @@ class KomiFilter:
             self._log(decision, text)
             return decision
 
-        # 2. Check with patterns for structural leaks (Slower regex check)
-        weak_hits = self._collect_matches(sample, self.REPLY_LEAK_PATTERNS)
-        if weak_hits:
+        # 2. Structural / Prefacing phrases regex check
+        structural_hits = self._collect_matches(sample, self.REPLY_LEAK_PATTERNS)
+        if structural_hits:
             decision = KomiFilterDecision(
                 blocked=True,
                 category="prompt_leak_response",
-                reason="model response resembles an internal prompt dump",
-                matches=weak_hits,
+                reason="model response resembles an internal prompt dump or prefacing leak",
+                matches=structural_hits,
+            )
+            self._log(decision, text)
+            return decision
+
+        # 3. Semantic / Fuzzy Overlap against System Prompt (N-gram & Jaccard Overlap)
+        clauses_to_check = (
+            self._extract_reference_clauses(system_prompt)
+            if system_prompt
+            else self.reference_clauses
+        )
+        fuzzy_leak_hit, detail = self._check_fuzzy_leak(sample, clauses_to_check)
+        if fuzzy_leak_hit:
+            decision = KomiFilterDecision(
+                blocked=True,
+                category="prompt_leak_response",
+                reason=f"model response exposed system prompt content ({detail})",
+                matches=(detail or "fuzzy_semantic_overlap",),
             )
             self._log(decision, text)
             return decision
@@ -320,23 +355,60 @@ class KomiFilter:
         """Return a reply-block message, localized."""
         return t("komifilter.response_blocked", locale)
 
-    def _prepare_text(self, text: str) -> str:
+    # -------------------------------------------------------------------------
+    # Internal Helpers: Layer 1 & 2 Normalization & Detection
+    # -------------------------------------------------------------------------
+
+    def _normalize_text(self, text: str) -> str:
+        """
+        Deep Multi-Stage Normalizer:
+        1. HTML Entity unescaping (&lt;, &#x69;)
+        2. URL percent-decoding (%69%67%6e)
+        3. String escape sequences (\\uXXXX, \\xNN)
+        4. Unicode NFKC normalization
+        5. Confusables / Homoglyphs mapping (Cyrillic/Greek -> Latin)
+        6. Stripping invisible / zero-width / bidi control characters
+        """
         if not text:
             return ""
-        
-        # Truncate to avoid DoS on heavy regex (Performance)
+
         truncated = text[: self.max_check_chars]
-        
-        # Unicode normalization (NFKC) to resolve fullwidth and compatibility characters
+
+        # Decode HTML entities & URL encoding
+        try:
+            truncated = html.unescape(truncated)
+            truncated = urllib.parse.unquote(truncated)
+        except Exception:
+            pass
+
+        # Decode raw string escape sequences (\uXXXX, \xNN)
+        try:
+            truncated = re.sub(
+                r"\\u([0-9a-fA-F]{4})",
+                lambda m: chr(int(m.group(1), 16)),
+                truncated,
+            )
+            truncated = re.sub(
+                r"\\x([0-9a-fA-F]{2})",
+                lambda m: chr(int(m.group(1), 16)),
+                truncated,
+            )
+        except Exception:
+            pass
+
+        # Unicode NFKC normalization
         normalized = unicodedata.normalize("NFKC", truncated)
-        
-        # Aggressively remove common obfuscation & invisible control characters (Security)
+
+        # Convert homoglyphs / confusables
+        translated = normalized.translate(HOMOGLYPH_MAP)
+
+        # Remove invisible and zero-width characters
         cleaned = re.sub(
             r"[\u200b-\u200f\u202a-\u202e\u2060-\u206f\ufe00-\ufe0f\ufeff\u00ad\u034f\u180e]",
             "",
-            normalized,
+            translated,
         )
-        
+
         return cleaned.strip()
 
     def _despace_text(self, text: str) -> str:
@@ -383,10 +455,187 @@ class KomiFilter:
                 raw_bytes = base64.b64decode(cand, validate=True)
                 decoded_text = raw_bytes.decode("utf-8", errors="ignore").strip()
                 if len(decoded_text) >= 5 and any(c.isalpha() for c in decoded_text):
-                    decoded_results.append(self._prepare_text(decoded_text))
+                    decoded_results.append(self._normalize_text(decoded_text))
             except Exception:
                 continue
         return decoded_results
+
+    def _is_benign_inquiry(self, text: str, matches: tuple[str, ...]) -> bool:
+        """
+        False-Positive Guard:
+        Distinguish pure educational questions ('What is .gitignore?') from actual directives.
+        """
+        # If the attack matched high-severity categories like special tokens or jailbreak mode, never bypass
+        critical_categories = {
+            "special_tokens_or_delimiters",
+            "jailbreak_mode",
+            "japanese_injection_and_jailbreak",
+            "hypothetical_unrestricted_roleplay",
+            "completion_forcing",
+        }
+        if any(m in critical_categories for m in matches):
+            return False
+
+        # Check for educational / explanation query structure
+        is_question = bool(
+            re.search(
+                r"^(?:what\s+(?:is|are|does)|how\s+(?:to|do|can)|explain|define|meaning\s+of|"
+                r"nghĩa\s+là\s+gì|làm\s+thế\s+nào\s+để|giải\s+thích|hướng\s+dẫn\s+cách)\b",
+                text,
+                re.IGNORECASE,
+            )
+        )
+        # Check if the text does NOT contain active imperative directives
+        has_imperative_directive = bool(
+            re.search(
+                r"\b(?:now\s+act|from\s+now\s+on|you\s+must|do\s+not\s+follow|bắt\s+buộc|từ\s+bây\s+giờ\s+hãy|hãy\s+làm\s+theo)\b",
+                text,
+                re.IGNORECASE,
+            )
+        )
+        return is_question and not has_imperative_directive
+
+    def _inspect_single_payload(self, sample: str, original_text: str) -> KomiFilterDecision:
+        """Inspect a single prepared payload with its multi-encoding variants."""
+        candidates: list[str] = [sample]
+
+        despaced = self._despace_text(sample)
+        if despaced and despaced != sample:
+            candidates.append(despaced)
+
+        unaccented = self._strip_accents(sample)
+        if unaccented and unaccented != sample:
+            candidates.append(unaccented)
+
+        if despaced:
+            despaced_unaccented = self._strip_accents(despaced)
+            if despaced_unaccented and despaced_unaccented not in candidates:
+                candidates.append(despaced_unaccented)
+
+        b64_payloads = self._extract_and_decode_base64(sample)
+        if b64_payloads:
+            for payload in b64_payloads:
+                candidates.append(payload)
+                payload_unaccented = self._strip_accents(payload)
+                if payload_unaccented != payload:
+                    candidates.append(payload_unaccented)
+
+        for candidate in candidates:
+            # 1. Check for prompt injection
+            injection_hits = self._collect_matches(candidate, self.USER_INJECTION_PATTERNS)
+            if injection_hits:
+                if not self._is_benign_inquiry(candidate, injection_hits):
+                    decision = KomiFilterDecision(
+                        blocked=True,
+                        category="prompt_injection",
+                        reason="suspicious instruction override attempt",
+                        matches=injection_hits,
+                    )
+                    self._log(decision, original_text)
+                    return decision
+
+            # 2. Check for prompt leak requests
+            leak_hits = self._collect_matches(candidate, self.USER_PROMPT_LEAK_PATTERNS)
+            if leak_hits:
+                decision = KomiFilterDecision(
+                    blocked=True,
+                    category="prompt_leak_request",
+                    reason="suspicious system prompt discovery attempt",
+                    matches=leak_hits,
+                )
+                self._log(decision, original_text)
+                return decision
+
+        return KomiFilterDecision(blocked=False)
+
+    def _inspect_multi_turn_history(
+        self,
+        current_sample: str,
+        history: list[dict[str, Any]] | list[Any],
+        original_text: str,
+    ) -> KomiFilterDecision:
+        """
+        Layer 2: Multi-turn sliding window inspection to prevent Payload Splitting across turns.
+        """
+        recent_user_texts: list[str] = []
+        for msg in reversed(history):
+            role = msg.get("role") if isinstance(msg, dict) else getattr(msg, "role", None)
+            content = msg.get("content") if isinstance(msg, dict) else getattr(msg, "content", None)
+            if role == "user" and isinstance(content, str) and content.strip():
+                recent_user_texts.append(self._normalize_text(content))
+                if len(recent_user_texts) >= 2:
+                    break
+
+        if not recent_user_texts:
+            return KomiFilterDecision(blocked=False)
+
+        # Concatenate in chronological order: [older, newer, current]
+        recent_user_texts.reverse()
+        concatenated = " ".join(recent_user_texts + [current_sample])
+
+        multi_turn_decision = self._inspect_single_payload(concatenated, original_text=original_text)
+        if multi_turn_decision.blocked:
+            decision = KomiFilterDecision(
+                blocked=True,
+                category=multi_turn_decision.category,
+                reason="multi-turn payload splitting attempt detected",
+                matches=multi_turn_decision.matches,
+            )
+            self._log(decision, original_text)
+            return decision
+
+        return KomiFilterDecision(blocked=False)
+
+    # -------------------------------------------------------------------------
+    # Internal Helpers: Layer 3 Semantic / Fuzzy Output Leak Detection
+    # -------------------------------------------------------------------------
+
+    def _extract_reference_clauses(self, system_prompt: str | None) -> list[str]:
+        """Extract core sentences and rule clauses from system prompt for semantic leak checking."""
+        if not system_prompt:
+            return []
+        lines = [line.strip() for line in re.split(r"[\n.!?]+", system_prompt) if line.strip()]
+        clauses: list[str] = []
+        for line in lines:
+            words = line.split()
+            # Keep meaningful clauses with at least 4 words and 20 chars
+            if len(words) >= 4 and len(line) >= 20:
+                clauses.append(line.lower())
+        return clauses
+
+    def _check_fuzzy_leak(
+        self,
+        reply: str,
+        clauses: list[str],
+    ) -> tuple[bool, str | None]:
+        """
+        Layer 3 Semantic Guard:
+        Detects if model reply contains n-grams or high token overlap with system prompt rules.
+        """
+        if not clauses:
+            return False, None
+
+        reply_lower = reply.lower()
+        reply_words = set(re.findall(r"\w+", reply_lower))
+
+        for clause in clauses:
+            clause_words = re.findall(r"\w+", clause)
+            if len(clause_words) >= 5:
+                # 1. 5-gram exact containment check
+                for i in range(len(clause_words) - 4):
+                    ngram = " ".join(clause_words[i : i + 5])
+                    if ngram in reply_lower:
+                        return True, f"5-gram match: '{ngram}'"
+
+            # 2. Token overlap (Jaccard-like containment)
+            if len(clause_words) >= 7:
+                clause_word_set = set(clause_words)
+                intersection = reply_words.intersection(clause_word_set)
+                overlap_ratio = len(intersection) / len(clause_word_set)
+                if overlap_ratio >= 0.75 and len(intersection) >= 6:
+                    return True, f"high rule clause overlap ({overlap_ratio:.0%})"
+
+        return False, None
 
     def _collect_matches(
         self,
@@ -398,11 +647,10 @@ class KomiFilter:
             if pattern.search(text):
                 found.append(label)
         return tuple(found)
-        
+
     def _log(self, decision: KomiFilterDecision, original_text: str) -> None:
         if self.logger_callback:
             try:
                 self.logger_callback(decision, original_text)
             except Exception:
                 pass  # Do not let logging failure crash the filter
-

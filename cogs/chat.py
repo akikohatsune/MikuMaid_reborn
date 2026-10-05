@@ -68,6 +68,13 @@ class AIChatCog(commands.Cog):
         await self.ban_store.initialize()
         await self.callnames_store.initialize()
         await self.replay_logger.initialize()
+        if not self.komifilter.sanity_passed:
+            LOGGER.error("KomiFilter startup sanity self-check failed: %s", self.komifilter.sanity_status)
+        else:
+            LOGGER.info(
+                "KomiFilter startup sanity self-check passed (%s/5 probes verified)",
+                len(self.komifilter.sanity_status),
+            )
         if self.settings.memory_idle_ttl_seconds > 0:
             self.cleanup_inactive_memory.start()
 
@@ -171,6 +178,7 @@ class AIChatCog(commands.Cog):
 
         raw_reply = await self.client.generate(llm_messages)
         reply = self._normalize_model_reply(raw_reply)
+        is_sane, reply = self.komifilter.sanity_check_reply(reply)
         reply_filter = self.komifilter.inspect_model_reply(reply)
         if reply_filter.blocked:
             LOGGER.warning(
@@ -217,6 +225,49 @@ class AIChatCog(commands.Cog):
         parts.append("[message_content]")
         parts.append(prompt)
         return "\n".join(parts)
+
+    async def _resolve_referenced_message(
+        self,
+        message: discord.Message | None,
+    ) -> discord.Message | None:
+        if message is None or not message.reference or not message.reference.message_id:
+            return None
+
+        # Check if already resolved in discord.py cache
+        resolved = message.reference.resolved
+        if isinstance(resolved, discord.Message):
+            return resolved
+
+        # Otherwise fetch from channel
+        try:
+            channel = message.channel
+            if hasattr(channel, "fetch_message"):
+                return await channel.fetch_message(message.reference.message_id)
+        except Exception as exc:
+            LOGGER.debug("Could not fetch referenced message %s: %s", message.reference.message_id, exc)
+        return None
+
+    def _build_referenced_context(self, ref_msg: discord.Message | None) -> str | None:
+        """Format the content of a referenced/replied-to message as prompt context."""
+        if ref_msg is None:
+            return None
+
+        author_name = ref_msg.author.display_name if ref_msg.author else "Unknown"
+        content = (ref_msg.clean_content or "").strip()
+
+        # If the referenced message has no text (e.g. only images/stickers/embeds)
+        if not content and ref_msg.attachments:
+            filenames = ", ".join(a.filename for a in ref_msg.attachments)
+            content = f"[Attached files: {filenames}]"
+        elif not content:
+            content = "[No text content]"
+
+        # Cap length of referenced context to avoid token flooding
+        max_ref_chars = 1500
+        if len(content) > max_ref_chars:
+            content = content[:max_ref_chars] + "... (truncated)"
+
+        return f"[Replying to @{author_name}]: \"{content}\""
 
     async def _extract_images_from_message(
         self,
@@ -321,10 +372,29 @@ class AIChatCog(commands.Cog):
 
         async with self._typing_context(target):
             try:
+                # 1. Resolve referenced message (if user replied to another message)
+                ref_msg = await self._resolve_referenced_message(source_message)
+                ref_context = self._build_referenced_context(ref_msg)
+
+                # 2. Extract images from both source message and referenced message
                 images = await self._extract_images_from_message(source_message)
+                if ref_msg is not None:
+                    ref_images = await self._extract_images_from_message(ref_msg)
+                    # Add referenced images that are not duplicates
+                    existing_b64 = {img["data_b64"] for img in images}
+                    for r_img in ref_images:
+                        if r_img["data_b64"] not in existing_b64:
+                            images.append(r_img)
+
+                # 3. Format prompt for LLM including referenced context if present
+                if ref_context:
+                    llm_user_prompt = f"{ref_context}\n{effective_prompt}"
+                else:
+                    llm_user_prompt = effective_prompt
+
                 reply = await self._generate_reply(
                     channel_id=channel_id,
-                    user_prompt=effective_prompt,
+                    user_prompt=llm_user_prompt,
                     images=images,
                     fallback_prompt=fallback_prompt,
                     guild_id=guild_id,

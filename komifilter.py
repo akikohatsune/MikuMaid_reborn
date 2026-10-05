@@ -172,7 +172,9 @@ class KomiFilter:
         (
             "rules_file_probe",
             re.compile(
-                r"\b(?:system_rules\.md|rules source|rules markdown|system rules|gemini\.md|miku response rules|critical language rule|luật hệ thống|luat he thong|quy tắc hệ thống|quy tac he thong|システムルール|ルールファイル)\b",
+                r"\b(?:system_rules\.md|gemini\.md)\b|"
+                r"(?:\b|[\W_])(?:rules\s+(?:source|markdown)|miku\s+response\s+rules|critical\s+language\s+rule)\b|"
+                r"(?:\b|[\W_])(?:show|reveal|read|dump|view|print|display|tell me|cho\s+xem|đọc|doc|in\s+ra)\b.{0,40}\b(?:system_rules|rules\.md|file\s+rules?|file\s+quy\s+tắc|file\s+chỉ\s+thị)\b",
                 flags=re.IGNORECASE,
             ),
         ),
@@ -186,22 +188,15 @@ class KomiFilter:
         "# miku response rules",
         "critical language rule",
         "for math answers, do not use latex delimiters",
+        "latex delimiters such as `$`",
+        "write math in plain-text notation",
         "[call_profile_context]",
         "[message_content]",
         "[hidden_hook:miku_fear]",
         "[attached_images=",
         "user calls miku:",
         "miku calls user:",
-        "you are miku, a playful ai assistant on discord",
-        "default to english unless the user explicitly asks",
-        # Vietnamese additions
-        "bạn là miku",
-        "quy tắc hệ thống",
-        "hướng dẫn nội bộ",
-        # Japanese additions
-        "あなたはmiku",
-        "システムプロンプト",
-        "内部ルール",
+        "system_rules.md",
     )
 
     # --- Layer 3: Model Structural / Prefacing Leak Patterns ---
@@ -225,7 +220,8 @@ class KomiFilter:
         (
             "internal_prompt_phrase",
             re.compile(
-                r"(?:\b|[\W_])(?:internal|hidden|developer|baseline|nội bộ|ẩn|内部|隠された)\s+(?:prompt|instructions?|logic|rules?|quy tắc|lệnh|プロンプト|指示|ロジック|ルール)\b",
+                r"(?:\b|[\W_])(?:my\s+(?:internal|hidden|developer|system)|internal\s+system|bot\s+system|quy\s+tắc\s+(?:hệ\s+thống|nội\s+bộ\s+của\s+bot))\s+(?:prompt|instructions?|logic|rules?|quy tắc|lệnh|プロンプト|指示|ロジック|ルール)\b|"
+                r"(?:\b|[\W_])(?:internal|hidden|developer|baseline|nội bộ|ẩn|内部|隠された)\s+(?:prompt|instructions?|guidelines?|system prompt|プロンプト|指示)\b",
                 flags=re.IGNORECASE,
             ),
         ),
@@ -860,13 +856,14 @@ class KomiFilter:
         """Extract core sentences and rule clauses from system prompt for semantic leak checking."""
         if not system_prompt:
             return []
-        lines = [line.strip() for line in re.split(r"[\n.!?]+", system_prompt) if line.strip()]
+        # Split primarily by line or explicit bullet point / semicolon, not every single period
+        raw_lines = [line.strip().lstrip("-*# \t") for line in system_prompt.splitlines() if line.strip()]
         clauses: list[str] = []
-        for line in lines:
-            words = line.split()
-            # Keep meaningful clauses with at least 4 words and 20 chars
-            if len(words) >= 4 and len(line) >= 20:
-                clauses.append(line.lower())
+        for line in raw_lines:
+            # Skip very short lines or markdown formatting headers
+            words = re.findall(r"\w+", line.lower())
+            if len(words) >= 6 and len(line) >= 30:
+                clauses.append(" ".join(words))
         return clauses
 
     def _check_fuzzy_leak(
@@ -876,29 +873,31 @@ class KomiFilter:
     ) -> tuple[bool, str | None]:
         """
         Layer 3 Semantic Guard:
-        Detects if model reply contains n-grams or high token overlap with system prompt rules.
+        Detects if model reply contains long n-grams or very high token overlap with system prompt rules.
         """
         if not clauses:
             return False, None
 
         reply_lower = reply.lower()
-        reply_words = set(re.findall(r"\w+", reply_lower))
+        reply_words_list = re.findall(r"\w+", reply_lower)
+        reply_word_set = set(reply_words_list)
+        reply_normalized_str = " ".join(reply_words_list)
 
         for clause in clauses:
-            clause_words = re.findall(r"\w+", clause)
-            if len(clause_words) >= 5:
-                # 1. 5-gram exact containment check
-                for i in range(len(clause_words) - 4):
-                    ngram = " ".join(clause_words[i : i + 5])
-                    if ngram in reply_lower:
-                        return True, f"5-gram match: '{ngram}'"
-
-            # 2. Token overlap (Jaccard-like containment)
+            clause_words = clause.split()
+            # 1. 7-gram exact containment check (prevents false matches on common 4-5 word phrases)
             if len(clause_words) >= 7:
+                for i in range(len(clause_words) - 6):
+                    ngram = " ".join(clause_words[i : i + 7])
+                    if ngram in reply_normalized_str:
+                        return True, f"7-gram match: '{ngram}'"
+
+            # 2. Token overlap (Jaccard containment: requires >= 85% overlap and at least 8 unique matching tokens)
+            if len(clause_words) >= 9:
                 clause_word_set = set(clause_words)
-                intersection = reply_words.intersection(clause_word_set)
+                intersection = reply_word_set.intersection(clause_word_set)
                 overlap_ratio = len(intersection) / len(clause_word_set)
-                if overlap_ratio >= 0.75 and len(intersection) >= 6:
+                if overlap_ratio >= 0.85 and len(intersection) >= 8:
                     return True, f"high rule clause overlap ({overlap_ratio:.0%})"
 
         return False, None

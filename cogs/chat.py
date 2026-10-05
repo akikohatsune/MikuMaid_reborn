@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+import contextlib
 import logging
 import mimetypes
 import re
@@ -483,13 +484,24 @@ class AIChatCog(commands.Cog):
             return False
         return await self.ban_store.is_user_banned(guild_id, user_id)
 
-    def _typing_context(
+    @contextlib.asynccontextmanager
+    async def _typing_context(
         self,
         target: commands.Context[commands.Bot] | discord.Message,
     ):
-        if isinstance(target, commands.Context):
-            return target.typing()
-        return target.channel.typing()
+        # Do not use target.typing() because on commands.Context with an interaction,
+        # discord.py 2.4.0 executes DeferTyping which calls ctx.defer() unconditionally,
+        # raising InteractionResponded if the interaction was already deferred.
+        # channel.typing() safely displays the typing indicator in the channel.
+        channel = getattr(target, "channel", None)
+        if channel is not None and hasattr(channel, "typing"):
+            try:
+                async with channel.typing():
+                    yield
+                return
+            except (discord.HTTPException, discord.Forbidden):
+                pass
+        yield
 
     async def _send_error(
         self,
@@ -502,10 +514,21 @@ class AIChatCog(commands.Cog):
         else:
             LOGGER.exception("AI reply failed: %s", exc)
         message = t("chat.overload", locale)
-        if isinstance(target, commands.Context):
+        try:
+            if isinstance(target, commands.Context):
+                if target.interaction is not None:
+                    await target.send(message)
+                    return
+                await target.reply(message, mention_author=False)
+                return
             await target.reply(message, mention_author=False)
-            return
-        await target.reply(message, mention_author=False)
+        except discord.HTTPException:
+            try:
+                channel = getattr(target, "channel", None)
+                if channel is not None:
+                    await channel.send(message)
+            except Exception:
+                pass
 
     async def _is_owner(self, user: discord.abc.User) -> bool:
         return await self.bot.is_owner(user)
@@ -598,27 +621,33 @@ class AIChatCog(commands.Cog):
     ) -> None:
         """Chat with the AI bot."""
         # Slash commands must be acknowledged before database and model work.
-        # Context.send/reply will automatically use followups after this defer.
-        if ctx.interaction is not None:
-            await ctx.defer()
+        # Context.send will automatically use followups after this defer.
+        if ctx.interaction is not None and not ctx.interaction.response.is_done():
+            try:
+                await ctx.defer()
+            except (discord.HTTPException, discord.InteractionResponded):
+                pass
 
-        locale = await self._get_locale(ctx.author.id, ctx.message.content)
+        msg_content = getattr(ctx.message, "content", "") if ctx.message else ""
+        locale = await self._get_locale(ctx.author.id, msg_content)
 
         if await self._is_banned_user(
             guild_id=ctx.guild.id if ctx.guild else None,
             user_id=ctx.author.id,
         ):
-            await ctx.reply(
-                t("chat.banned_message", locale),
-                mention_author=False,
-            )
+            banned_msg = t("chat.banned_message", locale)
+            if ctx.interaction is not None:
+                await ctx.send(banned_msg)
+            else:
+                await ctx.reply(banned_msg, mention_author=False)
             return
 
         if self.is_terminated:
-            await ctx.reply(
-                t("chat.terminated_message", locale, prefix=self.settings.command_prefix),
-                mention_author=False,
-            )
+            term_msg = t("chat.terminated_message", locale, prefix=self.settings.command_prefix)
+            if ctx.interaction is not None:
+                await ctx.send(term_msg)
+            else:
+                await ctx.reply(term_msg, mention_author=False)
             return
 
         await self._run_chat_and_reply(
@@ -840,15 +869,29 @@ class AIChatCog(commands.Cog):
 
         for idx, chunk in enumerate(chunks):
             if isinstance(target, commands.Context):
-                if idx == 0:
-                    await target.reply(chunk, mention_author=False)
-                else:
-                    await target.send(chunk)
+                try:
+                    if target.interaction is not None:
+                        await target.send(chunk)
+                    elif idx == 0:
+                        await target.reply(chunk, mention_author=False)
+                    else:
+                        await target.send(chunk)
+                except discord.HTTPException:
+                    try:
+                        await target.channel.send(chunk)
+                    except Exception:
+                        pass
             else:
-                if idx == 0:
-                    await target.reply(chunk, mention_author=False)
-                else:
-                    await target.channel.send(chunk)
+                try:
+                    if idx == 0:
+                        await target.reply(chunk, mention_author=False)
+                    else:
+                        await target.channel.send(chunk)
+                except discord.HTTPException:
+                    try:
+                        await target.channel.send(chunk)
+                    except Exception:
+                        pass
 
     def _sanitize_bot_output(self, text: str) -> str:
         text = text.replace("\r\n", "\n").replace("\n", " ")

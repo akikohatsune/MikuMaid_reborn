@@ -58,16 +58,25 @@ class MikuAIBot(commands.Bot):
         print("---")
 
     async def on_command_error(self, ctx: commands.Context, error: commands.CommandError) -> None:
+        content = getattr(ctx.message, "content", "") if ctx.message else ""
         if isinstance(error, commands.CommandNotFound):
-            print(f"[CommandNotFound] User {ctx.author} tried to use unknown command '{ctx.invoked_with}'. Full message: {ctx.message.content}")
+            print(f"[CommandNotFound] User {ctx.author} tried to use unknown command '{ctx.invoked_with}'. Full message: {content}")
         else:
             print(f"[CommandError] {ctx.command}: {error}")
             try:
                 from i18n import t, detect_language
-                locale = detect_language(ctx.message.content)
-                await ctx.reply(t("errors.generic", locale, error=error), mention_author=False)
+                locale = detect_language(content)
+                err_text = t("errors.generic", locale, error=error)
+                if ctx.interaction is not None:
+                    await ctx.send(err_text)
+                else:
+                    await ctx.reply(err_text, mention_author=False)
             except discord.HTTPException:
-                pass
+                try:
+                    if ctx.channel:
+                        await ctx.channel.send(err_text)
+                except Exception:
+                    pass
 
     def _active_chat_model(self) -> str:
         return self.settings.nvidia_model
